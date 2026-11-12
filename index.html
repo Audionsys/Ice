@@ -74,6 +74,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 #ready{position:fixed;left:50%;transform:translateX(-50%);bottom:46%;z-index:8;width:min(92vw,420px);text-align:center;padding:14px 16px;border-radius:16px;background:rgba(6,10,28,.72);border:1px solid rgba(255,255,255,.18);display:none;backdrop-filter:blur(4px)}
 #ready .rl{opacity:.75;font-size:12px;letter-spacing:1.5px}#ready .rs{font-size:17px;font-weight:700;margin:6px 0 4px}
 #ready .go{display:none;margin:10px auto 2px;padding:14px 34px;border-radius:14px;border:0;background:#f5c518;color:#14141c;font:inherit;font-size:22px;font-weight:900;box-shadow:0 0 22px rgba(245,197,24,.5);cursor:pointer}
+#ready .watch{display:none;margin:6px auto 0;padding:9px 20px;border-radius:12px;border:1px solid #9fb3e6;background:rgba(20,28,60,.7);color:#e8eeff;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
 #ready .back{display:block;margin:8px auto 0;background:none;border:0;color:#b9c6e8;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
 @media (min-aspect-ratio:21/20){#ready{left:calc((100vw - min(30vw,340px))/2);bottom:5%}}
 #avatar{position:fixed;inset:0;z-index:9;pointer-events:none}
@@ -99,7 +100,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 <canvas id="c3"></canvas><canvas id="c"></canvas>
 <button id="pz" aria-label="Pause">❚❚</button>
 <div id="avatar" style="display:none"><div class="avp" id="avPanel"></div></div>
-<div id="ready"><div class="rl" id="readyL"></div><div class="rs" id="readyS">Einlaufen …</div><button class="go" id="readyGo">▶ START</button><button class="back" id="readyBack">Zurück zum Menü</button></div>
+<div id="ready"><div class="rl" id="readyL"></div><div class="rs" id="readyS">Einlaufen …</div><button class="go" id="readyGo">▶ START</button><button class="watch" id="readyWatch">👀 Nur zuschauen</button><button class="back" id="readyBack">Zurück zum Menü</button></div>
 
 <div class="ov" id="menu"><button id="fsBtn" style="position:fixed;top:10px;right:10px;z-index:12;display:none;padding:7px 12px;border-radius:10px;border:0;background:rgba(255,255,255,.9);color:#14204a;font:800 13px system-ui,sans-serif">⛶ Vollbild</button><div class="card">
   <div style="display:flex;align-items:center;gap:12px"><img id="beeLogo" alt="Mini Ice Bees" style="width:64px;height:64px"><h1>Eiskür</h1></div>
@@ -808,7 +809,7 @@ function onNote(n,t){
 }
 const KEYS={ArrowLeft:0,ArrowDown:1,ArrowUp:2,ArrowRight:3,KeyD:0,KeyF:1,KeyJ:2,KeyK:3,KeyA:0,KeyS:1,KeyW:2};
 addEventListener('keydown',e=>{
-  if(state==='entry'){if((e.code==='Enter'||e.code==='Space')&&document.getElementById('readyGo').style.display!=='none'){e.preventDefault();startCountdown();}return;}
+  if(state==='entry'){if((e.code==='Enter'||e.code==='Space')&&document.getElementById('readyGo').style.display!=='none'){e.preventDefault();window.__auto=false;window.__watch=false;startCountdown();}return;}
   if(state==='replay'){if(e.code==='Escape'||e.code==='Enter')endReplay();else if(e.code==='ArrowRight')replayNext();else if(e.code==='ArrowLeft')seekReplay(rpTime()-8);return;}
   if(e.code==='Escape'||e.code==='KeyP'){togglePause();return;}
   if(e.repeat) return; const l=KEYS[e.code]; if(l!==undefined){e.preventDefault();press(l);}
@@ -987,7 +988,7 @@ function traceStep(on,dt){
 // ---------- Update ----------
 function update(dt){
   const t=songTime();
-  if(window.__auto){for(const n of P.notes){if(!n.judged&&t>=n.t){const d=window.__late&&n.take?.2:0; if(t>=n.t+d) grade(n,d,t);}}}
+  if(window.__auto){for(const n of P.notes){if(!n.judged&&t>=n.t){const d=window.__late&&n.take?.2:0; if(t>=n.t+d){ if(window.__watch) flash[n.lane]=1; grade(n,d,t);}}}}
   if(window.__autoPress!==undefined){for(const n of P.notes){if(n.t-t>1)break;if(!n.judged&&!n.pp&&t>=n.t+window.__autoPress+(Math.random()-.5)*.06){n.pp=1;press(n.lane);}}}
   for(const n of P.notes){ if(n.t-t>1) break; if(!n.judged&&t-syncOff-n.t>L.win[2]) miss(n,t); }
   if(P.team) return updateTeam(dt,t);
@@ -2197,7 +2198,9 @@ function v2Prepare(gl){ const sc=gl.scene; sc.updateMatrixWorld(true); let sm=nu
   const bladePts=[]; for(const p of parts){ const pp=p.g.attributes.position, si3=p.g.attributes.skinIndex; let lo=9; for(let v=0;v<pp.count;v++) lo=Math.min(lo,pp.getY(v)); if(lo>bladeMin+.03) continue;
     let a=null,b=null; for(let v=0;v<pp.count;v++){ if(pp.getY(v)>lo+.012) continue; const z=pp.getZ(v); if(!a||z<a.z) a={x:pp.getX(v),y:pp.getY(v),z,bi:GC(si3,v,0)}; if(!b||z>b.z) b={x:pp.getX(v),y:pp.getY(v),z,bi:GC(si3,v,0)}; }
     if(a) bladePts.push(a,b); }
-  const mats=gl.parser?null:null; return {parts,bladePts,hasSkirt:parts.some(p=>/rock|skirt/i.test(p.name)),bladeMin:parts.length?bladeMin:null,head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
+  const desc=name.map((_,i)=>{const o=[]; for(let k=0;k<n;k++){let p=k; while(p>=0&&p!==i) p=par[p]; if(p===i) o.push(k);} return o;});
+  const side=name.map(nm=>/^Left/.test(nm)?'Left':/^Right/.test(nm)?'Right':'');
+  const mats=gl.parser?null:null; return {desc,side,parts,bladePts,hasSkirt:parts.some(p=>/rock|skirt/i.test(p.name)),bladeMin:parts.length?bladeMin:null,head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
     waist:(()=>{const y=P('Spine').y; let rx=0,rz=0; for(let v=0;v<pos.count;v++){ if(Math.abs(pos.getY(v)-y)>.012) continue; const ddx=Math.abs(pos.getX(v)-P('Spine').x), ddz=Math.abs(pos.getZ(v)-P('Spine').z); if(ddx>.17||ddz>.17) continue; rx=Math.max(rx,ddx); rz=Math.max(rz,ddz); } return [rx,rz];})()};
 }
 function v2FitHair(D,gl){ let g=null; gl.scene.updateMatrixWorld(true); gl.scene.traverse(o=>{ if(o.isMesh&&!g){ g=v2Float(o.geometry); g.applyMatrix4(o.matrixWorld); } }); if(!g) return;
@@ -2282,9 +2285,20 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
   const lf=D.ix.LeftFoot, rf=D.ix.RightFoot, dy=(D.bladeMin!=null? Math.min(J.anL.y,J.anR.y)-SKATE_H*sc+(D.ankY-D.bladeMin)*s : Math.min(J.anL.y,J.anR.y))-Math.min(P[lf].y,P[rf].y);
   const S=V(6).set(s,s,s), M=GT.v2m||(GT.v2m=new THREE.Matrix4()), Tm=GT.v2t||(GT.v2t=new THREE.Matrix4());
   for(let i=0;i<n;i++){ P[i].y+=dy; const b=mod.v2b[i]; b.matrixWorld.compose(P[i],Dl[i],S); Tm.makeTranslation(-D.p0[i].x,-D.p0[i].y,-D.p0[i].z); b.matrixWorld.multiply(Tm); }
-  if(D.bladePts&&D.bladePts.length){ const floor=Math.min(J.anL.y,J.anR.y)-SKATE_H*sc; let mn=9; const w=V(10);
-    for(const q of D.bladePts){ w.set(q.x,q.y,q.z).applyMatrix4(mod.v2b[q.bi].matrixWorld); mn=Math.min(mn,w.y); }
-    const lift=floor-mn; if(lift>0){ for(let i=0;i<n;i++){ P[i].y+=lift; mod.v2b[i].matrixWorld.elements[13]+=lift; } } }
+  if(D.bladePts&&D.bladePts.length){ const floor=Math.min(J.anL.y,J.anR.y)-SKATE_H*sc, sup=J.anL.y<=J.anR.y?'Left':'Right', fi=D.ix[sup+'Foot'], w1=V(10), w2=V(11);
+    const pts=D.bladePts.filter(q=>D.side[q.bi]===sup); let tgt=0;
+    if(pts.length>=2&&(m.z||0)<.03){ // Standkufe flach auf dem Eis halten (keine Sprünge der ganzen Figur)
+      let a=null,b=null; const fw=GT.v2fw||(GT.v2fw=new THREE.Vector3());
+      // vorn/hinten = die beiden Endpunkte mit größtem Abstand
+      const W=pts.map(q=>V(13+pts.indexOf(q)).set(q.x,q.y,q.z).applyMatrix4(mod.v2b[q.bi].matrixWorld)); let best=-1; for(let i=0;i<W.length;i++)for(let j=i+1;j<W.length;j++){const d2=W[i].distanceToSquared(W[j]); if(d2>best){best=d2;a=W[i];b=W[j];}}
+      fw.subVectors(b,a); const hz=Math.hypot(fw.x,fw.z); if(hz>.05){ const ang=Math.atan2(fw.y,hz), ax=V(20).set(fw.z,0,-fw.x).normalize(), piv=P[fi];
+        const R=GT.v2r||(GT.v2r=new THREE.Matrix4()), T1=GT.v2t1||(GT.v2t1=new THREE.Matrix4()), T2=GT.v2t2||(GT.v2t2=new THREE.Matrix4());
+        R.makeRotationAxis(ax,ang); T1.makeTranslation(piv.x,piv.y,piv.z); T2.makeTranslation(-piv.x,-piv.y,-piv.z); R.premultiply(T1).multiply(T2);
+        for(const k of D.desc[fi]) mod.v2b[k].matrixWorld.premultiply(R); a.applyMatrix4(R); b.applyMatrix4(R); }
+      tgt=floor-Math.min(a.y,b.y); }
+    else { let mn=9; for(const q of D.bladePts){ w1.set(q.x,q.y,q.z).applyMatrix4(mod.v2b[q.bi].matrixWorld); mn=Math.min(mn,w1.y); } tgt=Math.max(0,floor-mn); }
+    tgt=Math.max(-.03,Math.min(.06,tgt)); const cur=mod.v2lift=mod.v2lift===undefined?tgt:mod.v2lift+(tgt-mod.v2lift)*(tgt>mod.v2lift?.6:.25);
+    for(let i=0;i<n;i++){ P[i].y+=cur; mod.v2b[i].matrixWorld.elements[13]+=cur; } }
   mod.sm.scale.set(1,mirror?-1:1,1); mod.v2boot.scale.copy(mod.sm.scale); if(mod.v2hair) mod.v2hair.scale.copy(mod.sm.scale); if(mod.v2parts) for(const pm of mod.v2parts) pm.scale.copy(mod.sm.scale);
   v2Blades(mod,mirror,s,Math.max(.02,SKATE_H*sc/s-D.ankY)); mod.v2bl.me.scale.copy(mod.sm.scale);
   // Daten für den Stoffrock
@@ -2794,7 +2808,7 @@ function startOutro(){
   EN.apl=applause(.2,30,1.4,1.5); excite=1;
 }
 function outroTick(te){ if(te-EN.pt>2.6&&!EN.done){EN.done=true; const gn=EN.apl; if(gn){const n=AC.currentTime;gn.gain.cancelScheduledValues(n);gn.gain.setValueAtTime(gn.gain.value,n);gn.gain.linearRampToValueAtTime(0,n+1.6);} setTimeout(()=>{ if(state==='outro') startReplay(0); },1700);} }
-function showGo(){document.getElementById('readyS').textContent='Bereit? Die Musik startet mit START.';document.getElementById('readyGo').style.display='inline-block';}
+function showGo(){document.getElementById('readyS').textContent='Bereit? Die Musik startet mit START.';document.getElementById('readyGo').style.display='inline-block';document.getElementById('readyWatch').style.display='inline-block';}
 let CDT=0, CDlast=-1;
 function cdTick(n){ if(!AC) return; const o=AC.createOscillator(), gn=AC.createGain(), t=AC.currentTime; o.type='sine'; o.frequency.value=n?660:990; gn.gain.setValueAtTime(.0001,t); gn.gain.exponentialRampToValueAtTime(.35,t+.01); gn.gain.exponentialRampToValueAtTime(.0001,t+(n?.25:.5)); o.connect(gn); gn.connect(master); o.start(t); o.stop(t+.6); }
 function startCountdown(){ if(state!=='entry'||CDT) return; iosAudioUnlock(); document.getElementById('ready').style.display='none'; CDT=performance.now()+3000; CDlast=-1; }
@@ -2810,7 +2824,8 @@ function beginProgram(){
   t0=AC.currentTime+.6; nextBeat=0; state='play'; lastT=0;
   if(P.buf){srcNode=AC.createBufferSource();srcNode.buffer=P.buf;srcNode.connect(master);srcNode.start(t0);}
 }
-document.getElementById('readyGo').onclick=startCountdown;
+document.getElementById('readyGo').onclick=()=>{window.__auto=false;window.__watch=false;startCountdown();};
+document.getElementById('readyWatch').onclick=()=>{window.__auto=true;window.__watch=true;startCountdown();};
 document.getElementById('readyBack').onclick=()=>{document.getElementById('ready').style.display='none';toMenu();};
 async function loadCustom(file){
   if(!file) return; const m=document.getElementById('msg'); if(m) m.textContent='⏳ „'+file.name+'“ wird geladen und analysiert …';
@@ -2820,7 +2835,7 @@ async function loadCustom(file){
     const k=SONGS.findIndex(x=>x.id===S.id); if(k>=0) SONGS[k]=S; else SONGS.push(S); buildMenu();
   }catch(e){ if(m) m.textContent=e&&e.message==='kurz'?'Der Song ist zu kurz (mindestens 45 Sekunden).':'Diese Datei konnte nicht gelesen werden.'; }
 }
-function toMenu(){stopSong();document.getElementById('ready').style.display='none';state='menu';P=null;if(AC)AC.resume();document.getElementById('pz').style.display='none';document.getElementById('result').classList.add('hide');buildMenu();document.getElementById('menu').classList.remove('hide');}
+function toMenu(){window.__auto=false;window.__watch=false;stopSong();document.getElementById('ready').style.display='none';state='menu';P=null;if(AC)AC.resume();document.getElementById('pz').style.display='none';document.getElementById('result').classList.add('hide');buildMenu();document.getElementById('menu').classList.remove('hide');}
 function buildResults(){
   try{localStorage.setItem('eiskuer_sync',syncOff.toFixed(3));}catch(e){}
   const all=P.notes, acc=all.reduce((s,n)=>s+VAL[Math.max(0,n.res)],0)/all.length, cr=maxCombo/all.length;
@@ -2828,7 +2843,7 @@ function buildResults(){
   const comps=[['Eislaufqualität',q(10*(.3+.7*acc)-falls*.5)],['Komposition',q(10*(.35+.65*(.5*acc+.5*cr)))],['Präsentation',q(10*(.3+.7*acc)-falls*.75)]];
   const pcs=comps.reduce((s,c)=>s+c[1],0)*1.33, total=Math.max(0,tes+pcs-deduct), pct=total/P.maxScore-falls*.05;
   const medal=pct>=.82?'🥇 Gold':pct>=.68?'🥈 Silber':pct>=.52?'🥉 Bronze':'Weiter üben – das wird!';
-  const best=bestOf(curSong,curLevel), pb=total>best; if(pb) setBest(curSong,curLevel,total);
+  const best=bestOf(curSong,curLevel), pb=!window.__watch&&total>best; if(pb) setBest(curSong,curLevel,total);
   const rows=P.els.filter(e=>e.type!=='trans').map((e,i)=>{const r=e.res||{code:e.icode,bv:0,goe:0,gp:0,tot:0};return `<tr><td>${i+1}</td><td><b>${r.code}</b><br><span style="opacity:.6;font-size:12px">${e.name}</span></td><td class="r">${r.bv.toFixed(2)}</td><td class="r" style="color:${r.goe>0?'#7dffb2':r.goe<0?'#ff9b9b':'#fff'}">${r.goe>0?'+':''}${r.goe}</td><td class="r"><b>${r.tot.toFixed(2)}</b></td></tr>`;}).join('');
   P.pct=pct; P.resHTML=`
    <div style="opacity:.75;letter-spacing:2px;font-size:13px">KISS &amp; CRY · ${P.label.toUpperCase()}</div>
