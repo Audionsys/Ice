@@ -2247,7 +2247,7 @@ function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; m
   mod.sm=sm; mod.v2b=bones; mod.v2boot=boot; mod.v2U=U; mod.smU=null; mod.v2D=bones.map(()=>new THREE.Quaternion()); mod.v2P=bones.map(()=>new THREE.Vector3());
   if(D.hairG){ const hm=new THREE.MeshStandardMaterial({color:'#7a4a2a',roughness:.48,metalness:0}); if(mirror){hm.transparent=true;hm.opacity=.2;hm.depthWrite=false;}
     const hair=new THREE.SkinnedMesh(D.hairG,hm); hair.bindMode='detached'; hair.bind(skel,new THREE.Matrix4()); hair.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); hair.frustumCulled=false; hair.castShadow=!mirror; mod.grp.add(hair); mod.v2hair=hair; }
-  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(mirror){pm.transparent=true;pm.opacity=.2;pm.depthWrite=false;}
+  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(mirror){pm.transparent=true;pm.opacity=.2;pm.depthWrite=false;}
       const pme=new THREE.SkinnedMesh(p.g,pm); pme.bindMode='detached'; pme.bind(skel,new THREE.Matrix4()); pme.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); pme.frustumCulled=false; pme.castShadow=!mirror; mod.grp.add(pme); mod.v2parts.push(pme); } }
   mod.v2Mat=mat; makeSoftSkirt(mod,mirror); }
 function v2Blades(mod,mirror,s,hb){ if(mod.v2bl&&Math.abs(mod.v2bl.hb-hb)<.002) return; const D=mod.v2G;
