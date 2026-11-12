@@ -2192,8 +2192,12 @@ function v2Prepare(gl){ const sc=gl.scene; sc.updateMatrixWorld(true); let sm=nu
   // fertige Teile (Haare, Schlittschuhe) auf die Knochenreihenfolge des Körpers umschlüsseln
   const parts=[]; let bladeMin=9; for(const o of sks){ if(o===sm) continue; const pg=o.geometry.clone(); pg.applyMatrix4(o.matrixWorld); pg.deleteAttribute('tangent');
     const map=o.skeleton.bones.map(bb=>ix[bb.name.replace(/^mixamorig:?/,'')]??0), si2=pg.attributes.skinIndex; for(let v=0;v<si2.count;v++) for(let j=0;j<4;j++){ const k=GC(si2,v,j); si2.setComponent(v,j,map[k]); }
-    const pp=pg.attributes.position; for(let v=0;v<pp.count;v++) bladeMin=Math.min(bladeMin,pp.getY(v)); parts.push({g:pg,mat:o.material}); }
-  const mats=gl.parser?null:null; return {parts,bladeMin:parts.length?bladeMin:null,head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
+    const pp=pg.attributes.position; for(let v=0;v<pp.count;v++) bladeMin=Math.min(bladeMin,pp.getY(v)); parts.push({g:pg,mat:o.material,name:o.name}); }
+  // Kufen-Endpunkte (vorn/hinten je Fuß), damit sie nie ins Eis tauchen
+  const bladePts=[]; for(const p of parts){ const pp=p.g.attributes.position, si3=p.g.attributes.skinIndex; let lo=9; for(let v=0;v<pp.count;v++) lo=Math.min(lo,pp.getY(v)); if(lo>bladeMin+.03) continue;
+    let a=null,b=null; for(let v=0;v<pp.count;v++){ if(pp.getY(v)>lo+.012) continue; const z=pp.getZ(v); if(!a||z<a.z) a={x:pp.getX(v),y:pp.getY(v),z,bi:GC(si3,v,0)}; if(!b||z>b.z) b={x:pp.getX(v),y:pp.getY(v),z,bi:GC(si3,v,0)}; }
+    if(a) bladePts.push(a,b); }
+  const mats=gl.parser?null:null; return {parts,bladePts,hasSkirt:parts.some(p=>/rock|skirt/i.test(p.name)),bladeMin:parts.length?bladeMin:null,head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
     waist:(()=>{const y=P('Spine').y; let rx=0,rz=0; for(let v=0;v<pos.count;v++){ if(Math.abs(pos.getY(v)-y)>.012) continue; const ddx=Math.abs(pos.getX(v)-P('Spine').x), ddz=Math.abs(pos.getZ(v)-P('Spine').z); if(ddx>.17||ddz>.17) continue; rx=Math.max(rx,ddx); rz=Math.max(rz,ddz); } return [rx,rz];})()};
 }
 function v2FitHair(D,gl){ let g=null; gl.scene.updateMatrixWorld(true); gl.scene.traverse(o=>{ if(o.isMesh&&!g){ g=v2Float(o.geometry); g.applyMatrix4(o.matrixWorld); } }); if(!g) return;
@@ -2278,6 +2282,9 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
   const lf=D.ix.LeftFoot, rf=D.ix.RightFoot, dy=(D.bladeMin!=null? Math.min(J.anL.y,J.anR.y)-SKATE_H*sc+(D.ankY-D.bladeMin)*s : Math.min(J.anL.y,J.anR.y))-Math.min(P[lf].y,P[rf].y);
   const S=V(6).set(s,s,s), M=GT.v2m||(GT.v2m=new THREE.Matrix4()), Tm=GT.v2t||(GT.v2t=new THREE.Matrix4());
   for(let i=0;i<n;i++){ P[i].y+=dy; const b=mod.v2b[i]; b.matrixWorld.compose(P[i],Dl[i],S); Tm.makeTranslation(-D.p0[i].x,-D.p0[i].y,-D.p0[i].z); b.matrixWorld.multiply(Tm); }
+  if(D.bladePts&&D.bladePts.length){ const floor=Math.min(J.anL.y,J.anR.y)-SKATE_H*sc; let mn=9; const w=V(10);
+    for(const q of D.bladePts){ w.set(q.x,q.y,q.z).applyMatrix4(mod.v2b[q.bi].matrixWorld); mn=Math.min(mn,w.y); }
+    const lift=floor-mn; if(lift>0){ for(let i=0;i<n;i++){ P[i].y+=lift; mod.v2b[i].matrixWorld.elements[13]+=lift; } } }
   mod.sm.scale.set(1,mirror?-1:1,1); mod.v2boot.scale.copy(mod.sm.scale); if(mod.v2hair) mod.v2hair.scale.copy(mod.sm.scale); if(mod.v2parts) for(const pm of mod.v2parts) pm.scale.copy(mod.sm.scale);
   v2Blades(mod,mirror,s,Math.max(.02,SKATE_H*sc/s-D.ankY)); mod.v2bl.me.scale.copy(mod.sm.scale);
   // Daten für den Stoffrock
@@ -2384,7 +2391,7 @@ function pose3D(m,mod,t,ox,oz,ang,lift,mirror){
   P3.buckle.position.copy(waist).addScaledVector(fwd,.125*sc); P3.buckle.quaternion.copy(basisQuat(axis,side)); P3.buckle.scale.set(.05*sc,.035*sc,.012*sc);
   P3.belt.position.copy(waist); P3.belt.quaternion.copy(basisQuat(axis,side)); P3.belt.rotateX(PI/2); P3.belt.scale.set(.122*sc*1.15,.122*sc*.95,.12*sc);
   if(mod.sm){ let Jn=J; if(mirror){Jn=mod.Jn||(mod.Jn={}); for(const n in RG){const p=RG[n]; (Jn[n]||(Jn[n]=new THREE.Vector3())).set(ox+(p[0]*ca-p[2]*sa)*sc,p[1]*sc+lift,oz+(p[0]*sa+p[2]*ca)*sc);} ikApply(Jn,m);}
-    if(mod.v2){ poseV2(m,mod,Jn,sc,mirror); v2Colors(mod,LK,CO); for(const k in P3) P3[k].visible=false; if(!mod.v2G.boy) softSkirt(m,mod,sc,mirror,CO); else if(mod.sk2) mod.sk2.me.visible=false; return; }
+    if(mod.v2){ poseV2(m,mod,Jn,sc,mirror); v2Colors(mod,LK,CO); for(const k in P3) P3[k].visible=false; if(!mod.v2G.boy&&!mod.v2G.hasSkirt) softSkirt(m,mod,sc,mirror,CO); else if(mod.sk2) mod.sk2.me.visible=false; return; }
     if(mod.boy){ poseGrace(m,mod,Jn,sc,mirror); boyColors(mod,LK,CO); for(const k in P3) P3[k].visible=false; return; }
     poseGrace(m,mod,Jn,sc,mirror); graceColors(mod,LK,CO); mod.smU.uFrk.value=LK.frk?1:0; mod.smU.uHairC.value.set(LK.hair||'#5a3420'); mod.smU.uHairOn.value=1; graceGlasses(mod,LK,mirror); softSkirt(m,mod,sc,mirror,CO);
     const HP=['pony','bun2','bun3','bob','long','br0','br1','br2','br3','br4','scr'], st=LK.style||'bun';
