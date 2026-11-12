@@ -2136,11 +2136,14 @@ function loadV2(){ if(V2G||V2L) return; V2L=1;
   const parse=(L,js)=>new Promise((res,rej)=>{ const bs=atob(js.b64), u8=new Uint8Array(bs.length); for(let i=0;i<bs.length;i++)u8[i]=bs.charCodeAt(i); new L.GLTFLoader().parse(u8.buffer,'',res,rej); });
   const reset=()=>{ if(R3){for(const [mm,e] of R3.models){for(const k in e)R3.scene.remove(e[k].grp);} R3.models.clear();} };
   import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js').then(L=>{
-    getJ('model/grace_v2.json').then(js=>parse(L,js)).then(gl=>{ V2G=v2Prepare(gl); reset(); return getJ('model/hair_bun_v2.json').then(js=>parse(L,js)).then(h=>{ v2FitHair(V2G,h); reset(); }).catch(e=>console.warn('hair',e)).then(()=>getJ('model/skate_w_v2.json')).then(js=>parse(L,js)).then(k=>{ V2G.skateSrc=k; reset(); }).catch(e=>console.warn('skate',e)).then(()=>getJ('model/tim_v2.json')); }).then(js=>parse(L,js)).then(gl=>{ V2B=v2Prepare(gl); V2B.boy=true; reset(); return getJ('model/skate_b_v2.json').then(js=>parse(L,js)).then(k=>{ V2B.skateSrc=k; reset(); }).catch(e=>console.warn('skate b',e)); }).catch(e=>{console.warn('V2',e); if(!V2G)V2L=0;}); })
+    // Komplettmodelle aus Blender: Körper, Haare und Schlittschuhe am selben Skelett
+    getJ('model/grace_v3.json').then(js=>parse(L,js)).then(gl=>{ V2G=v2Prepare(gl); reset(); return getJ('model/tim_v3.json'); })
+      .then(js=>parse(L,js)).then(gl=>{ V2B=v2Prepare(gl); V2B.boy=true; reset(); }).catch(e=>{console.warn('V2',e); if(!V2G)V2L=0;}); })
   .catch(e=>{console.warn('V2',e);V2L=0;}); }
 function v2Basis(d,sd,out){ const y=GT.by||(GT.by=new THREE.Vector3()),x=GT.bx||(GT.bx=new THREE.Vector3()),z=GT.bz||(GT.bz=new THREE.Vector3()),M=GT.bm||(GT.bm=new THREE.Matrix4());
   y.copy(d).normalize(); x.copy(sd).addScaledVector(y,-sd.dot(y)); if(x.lengthSq()<1e-9)x.set(1,0,0); x.normalize(); z.crossVectors(x,y); M.makeBasis(x,y,z); return out.setFromRotationMatrix(M); }
-function v2Prepare(gl){ const sc=gl.scene; sc.updateMatrixWorld(true); let sm=null; sc.traverse(o=>{if(o.isSkinnedMesh&&!sm)sm=o;});
+function v2Prepare(gl){ const sc=gl.scene; sc.updateMatrixWorld(true); let sm=null; const sks=[]; sc.traverse(o=>{if(o.isSkinnedMesh)sks.push(o);});
+  sm=sks.find(o=>/body/i.test(o.name)||/body/i.test(o.parent&&o.parent.name||''))||sks.reduce((a,b)=>(!a||b.geometry.attributes.position.count>a.geometry.attributes.position.count)?b:a,null);
   const B=sm.skeleton.bones, n=B.length, name=B.map(b=>b.name.replace(/^mixamorig:?/,'')), ix={}; name.forEach((nm,i)=>ix[nm]=i);
   const par=B.map(b=>B.indexOf(b.parent)), p0=[], q0=[], tmpS=new THREE.Vector3();
   for(const b of B){const p=new THREE.Vector3(),q=new THREE.Quaternion(); b.matrixWorld.decompose(p,q,tmpS); p0.push(p); q0.push(q);}
@@ -2186,7 +2189,11 @@ function v2Prepare(gl){ const sc=gl.scene; sc.updateMatrixWorld(true); let sm=nu
   bg.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(bsi,4)); bg.setAttribute('skinWeight',new THREE.Float32BufferAttribute(bsw,4)); bg.setIndex(bix); bg.computeVertexNormals();
   const head=(()=>{ const ny=P('Neck').y+.03, cx=P('Head').x, cz=P('Head').z; let T=-9,W=0; for(let v=0;v<pos.count;v++){ const y=pos.getY(v); if(y<ny) continue; const dx=Math.abs(pos.getX(v)-cx); if(dx>.16) continue; T=Math.max(T,y); W=Math.max(W,dx); }
     const hy=T-.075; let fz=-9,bz=9; for(let v=0;v<pos.count;v++){ const y=pos.getY(v); if(Math.abs(pos.getX(v)-cx)>.03) continue; if(Math.abs(y-hy)<.01) fz=Math.max(fz,pos.getZ(v)); if(y>hy-.02&&y<T) bz=Math.min(bz,pos.getZ(v)); } return {cx,cz,T,W,hy,fz,bz}; })();
-  const mats=gl.parser?null:null; return {head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
+  // fertige Teile (Haare, Schlittschuhe) auf die Knochenreihenfolge des Körpers umschlüsseln
+  const parts=[]; let bladeMin=9; for(const o of sks){ if(o===sm) continue; const pg=o.geometry.clone(); pg.applyMatrix4(o.matrixWorld); pg.deleteAttribute('tangent');
+    const map=o.skeleton.bones.map(bb=>ix[bb.name.replace(/^mixamorig:?/,'')]??0), si2=pg.attributes.skinIndex; for(let v=0;v<si2.count;v++) for(let j=0;j<4;j++){ const k=GC(si2,v,j); si2.setComponent(v,j,map[k]); }
+    const pp=pg.attributes.position; for(let v=0;v<pp.count;v++) bladeMin=Math.min(bladeMin,pp.getY(v)); parts.push({g:pg,mat:o.material}); }
+  const mats=gl.parser?null:null; return {parts,bladeMin:parts.length?bladeMin:null,head,sm,g,bg,n,name,ix,par,p0,q0,rest,drive,legLen,ankY,foot,mat:sm.material,neckY:P('Head').y-.005,
     waist:(()=>{const y=P('Spine').y; let rx=0,rz=0; for(let v=0;v<pos.count;v++){ if(Math.abs(pos.getY(v)-y)>.012) continue; const ddx=Math.abs(pos.getX(v)-P('Spine').x), ddz=Math.abs(pos.getZ(v)-P('Spine').z); if(ddx>.17||ddz>.17) continue; rx=Math.max(rx,ddx); rz=Math.max(rz,ddz); } return [rx,rz];})()};
 }
 function v2FitHair(D,gl){ let g=null; gl.scene.updateMatrixWorld(true); gl.scene.traverse(o=>{ if(o.isMesh&&!g){ g=v2Float(o.geometry); g.applyMatrix4(o.matrixWorld); } }); if(!g) return;
@@ -2236,8 +2243,11 @@ function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; m
   mod.sm=sm; mod.v2b=bones; mod.v2boot=boot; mod.v2U=U; mod.smU=null; mod.v2D=bones.map(()=>new THREE.Quaternion()); mod.v2P=bones.map(()=>new THREE.Vector3());
   if(D.hairG){ const hm=new THREE.MeshStandardMaterial({color:'#7a4a2a',roughness:.48,metalness:0}); if(mirror){hm.transparent=true;hm.opacity=.2;hm.depthWrite=false;}
     const hair=new THREE.SkinnedMesh(D.hairG,hm); hair.bindMode='detached'; hair.bind(skel,new THREE.Matrix4()); hair.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); hair.frustumCulled=false; hair.castShadow=!mirror; mod.grp.add(hair); mod.v2hair=hair; }
+  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(mirror){pm.transparent=true;pm.opacity=.2;pm.depthWrite=false;}
+      const pme=new THREE.SkinnedMesh(p.g,pm); pme.bindMode='detached'; pme.bind(skel,new THREE.Matrix4()); pme.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); pme.frustumCulled=false; pme.castShadow=!mirror; mod.grp.add(pme); mod.v2parts.push(pme); } }
   mod.v2Mat=mat; makeSoftSkirt(mod,mirror); }
 function v2Blades(mod,mirror,s,hb){ if(mod.v2bl&&Math.abs(mod.v2bl.hb-hb)<.002) return; const D=mod.v2G;
+  if(D.parts&&D.parts.length){ if(!mod.v2bl) mod.v2bl={me:new THREE.Object3D(),hb}; return; }
   if(D.skateSrc){ if(mod.v2bl) mod.grp.remove(mod.v2bl.me); const hk=Math.round(hb*200); D.skates=D.skates||{}; if(!D.skates[hk]) D.skates[hk]=v2FitSkate(D,D.skateSrc,hk/200); D.skate=D.skates[hk];
     if(D.skate){ const mt=mirror?(D.skateMatM||(D.skateMatM=Object.assign(D.skate.mat.clone(),{transparent:true,opacity:.2,depthWrite:false}))):(D.skateMat||(D.skateMat=D.skate.mat.clone())); const me=new THREE.SkinnedMesh(D.skate.g,mt); me.bindMode='detached'; me.bind(mod.sm.skeleton,new THREE.Matrix4()); me.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); me.frustumCulled=false; me.castShadow=!mirror; mod.grp.add(me);
       mod.v2bl={me,hb}; mod.v2boot.visible=false; mod.v2U.uBoot.value=Math.min(D.skateTop-.012,D.ankY+.11); return; } }
@@ -2265,10 +2275,10 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
           d1.normalize(); const ax=V(9).set(-d1.z,0,d1.x); if(ax.lengthSq()>1e-8){ ax.normalize(); d1.applyAxisAngle(ax,(dr.pitch0+.1527)); } } r.setFromUnitVectors(d0,d1.normalize()); Dl[i].copy(r).multiply(dp); break; }
       default: Dl[i].copy(dp); } }
   // Fußgelenke auf Höhe der Rig-Knöchel (inkl. Schlittschuh)
-  const lf=D.ix.LeftFoot, rf=D.ix.RightFoot, dy=Math.min(J.anL.y,J.anR.y)-Math.min(P[lf].y,P[rf].y);
+  const lf=D.ix.LeftFoot, rf=D.ix.RightFoot, dy=(D.bladeMin!=null? Math.min(J.anL.y,J.anR.y)-SKATE_H*sc+(D.ankY-D.bladeMin)*s : Math.min(J.anL.y,J.anR.y))-Math.min(P[lf].y,P[rf].y);
   const S=V(6).set(s,s,s), M=GT.v2m||(GT.v2m=new THREE.Matrix4()), Tm=GT.v2t||(GT.v2t=new THREE.Matrix4());
   for(let i=0;i<n;i++){ P[i].y+=dy; const b=mod.v2b[i]; b.matrixWorld.compose(P[i],Dl[i],S); Tm.makeTranslation(-D.p0[i].x,-D.p0[i].y,-D.p0[i].z); b.matrixWorld.multiply(Tm); }
-  mod.sm.scale.set(1,mirror?-1:1,1); mod.v2boot.scale.copy(mod.sm.scale); if(mod.v2hair) mod.v2hair.scale.copy(mod.sm.scale);
+  mod.sm.scale.set(1,mirror?-1:1,1); mod.v2boot.scale.copy(mod.sm.scale); if(mod.v2hair) mod.v2hair.scale.copy(mod.sm.scale); if(mod.v2parts) for(const pm of mod.v2parts) pm.scale.copy(mod.sm.scale);
   v2Blades(mod,mirror,s,Math.max(.02,SKATE_H*sc/s-D.ankY)); mod.v2bl.me.scale.copy(mod.sm.scale);
   // Daten für den Stoffrock
   const sp=D.ix.Spine; mod.v2w=(mod.v2w||new THREE.Vector3()).copy(P[sp]).addScaledVector(up.normalize(),-.01*s);
