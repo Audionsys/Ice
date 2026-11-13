@@ -1316,7 +1316,8 @@ const TEAMDEF={
  TME:{c:'ME',n:'Move-Element',bv:3.5,pose:'spiral',sp:1.1,d:'Sternformation mit Spiralen – das große Finale'}};
 const LOOKS=(()=>{const hair=[['#5a321b','#3d2111'],['#d9b26a','#b8904a'],['#1d1410','#0d0806'],['#8a3b1e','#6a2a14'],['#a07548','#7a5530'],['#b4552a','#8e3f1c'],['#c9a063','#a07c45'],['#6b4226','#4a2c18']];
   const skin=['#f2c4a2','#e8b48f','#c98e6b','#f5d0b5','#a8714f','#efc09a','#dba57e','#f4c9a8'], hs=[.98,1.04,.94,1.0,1.06,.95,1.02,.92], st=['bun','pony','bun','pony','bun','pony','pony','bun'];
-  return hair.map((h,i)=>({hair:h[0],hair2:h[1],skin:skin[i],leg:skin[i],h:hs[i],style:st[i]}));})();
+  const eye=['#5b3a22','#2f6fb5','#4a8a5a','#7f8f9e','#a0702e','#5b3a22','#2f6fb5','#4a8a5a'], lips=['#d98390','#c75b6a','#e9a0b0','#b0525a','#c98a7a','#d98390','#e9a0b0','#c75b6a'];
+  return hair.map((h,i)=>({hair:h[0],hair2:h[1],skin:skin[i],leg:skin[i],h:hs[i],style:st[i],eye:eye[i],lips:lips[i],varied:true}));})();
 let TEAM=[], gc={x:0,y:6,mh:0}, gcp={x:0,y:10,mh:0,v:0}, teamQ=1, curShape='TBL', shapeT0=0, shapeH=0, teamMiss=0;
 function initTeam(){
   TEAM=LOOKS.map((lk,i)=>({i,look:i===0?avLook():lk,x:(i%4-1.5)*2.3,y:5+Math.floor(i/4)*2.4,head:0,face:0,z:0,pose:'glide',spinPose:null,flare:0,dist:i*.05,v:0,vx:0,vy:0,air:false,rig:{cur:null,vel:null},w:.55+((i*37)%10)/10,err:0,lag:0,fallT:-99,stumbleT:-99,accT:-99,twz:[],ph:i*1.7,slot:i,faceT:0,jf:{},spinW:0}));
@@ -2333,7 +2334,7 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
   mod.v2r=[D.waist[0]*s*1.12,D.waist[1]*s*1.15];
   if(!mirror){(mod.ftL||(mod.ftL=new THREE.Vector3())).copy(P[lf]); (mod.ftR||(mod.ftR=new THREE.Vector3())).copy(P[rf]);}
 }
-function v2Colors(mod,LK,CO){ const U=mod.v2U, D=mod.v2G, av=LK&&LK.avatar;
+function v2Colors(mod,LK,CO){ const U=mod.v2U, D=mod.v2G, av=LK&&(LK.avatar||LK.varied);
   if(U.uMask){ U.uMaskOn.value=(av&&D.mask)?1:0; if(av){ U.uSkinN.value.set(LK.skin); U.uEye.value.set(LK.eye||'#5b3a22'); U.uLip.value.set(LK.lips||'#d98390'); } }
   if(mod.v2hairU){ if(av&&LK.hair){ mod.v2hairU.uHair.value.set(LK.hair); mod.v2hairU.uHairOn.value=1; } else mod.v2hairU.uHairOn.value=0; } if(mod.v2cos) for(const CU of mod.v2cos){ CU.uMain.value.set(CO.v2||CO.d1||'#1e3fa8'); CU.uSpk.value.set(CO.v2s||'#ffffff'); } if(!mod.v2G.boy) mod.v2U.uSuit.value.set(CO.d1||'#ffffff'); if(mod.v2hair&&LK.hair){ mod.v2hair.material.color.set(LK.hair); mod.v2U.uScalp.value.set(LK.hair).multiplyScalar(.8); mod.v2U.uScalpOn.value=1; } }
 
@@ -2711,7 +2712,13 @@ function idle(now,dt){
   cam.x+=(sk.x-cam.x)*.03; cam.y+=(sk.y-cam.y)*.03;
   traceStep(true,dt);
   const save=HW; g.setTransform(DPR,0,0,DPR,0,0);
-  const t=now/1000; P={els:[],notes:[],spb:.5,endT:1e9,bt:b=>b*.5,bidx:t=>Math.floor(t/.5),barLen:3,barPh:0,label:''}; render(t,now); P=null;
+  const t=now/1000, ca=Math.cos(sk.head), sa=Math.sin(sk.head);
+  if(mode==='pair'){ pm.x=sk.x-sa*1.1; pm.y=sk.y+ca*1.1; pm.head=sk.head; pm.face=0; pm.pose='glide'; pm.z=0; pm.v=6; pm.dist=sk.dist; rigUpdate(dt,t,pm); }
+  if(mode==='team'){ if(!TEAM.length||TEAM._idle!==true){ TEAM=LOOKS.map((lk,i)=>({i,look:i===0?avLook():lk,x:0,y:0,head:0,face:0,z:0,pose:'glide',spinPose:null,flare:0,dist:i*.05,v:6,vx:0,vy:0,air:false,rig:{cur:null,vel:null},fallT:-99,stumbleT:-99,twz:[]})); TEAM._idle=true; }
+    TEAM.forEach((m,i)=>{ if(i===0){ Object.assign(m,{x:sk.x,y:sk.y,head:sk.head}); } else { const lx=-(Math.floor(i/2)+(i%2?0:0))*1.6-1.2*(i>0), ly=(i%2?1:-1)*(.9+Math.floor((i-1)/2)*.35); m.x=sk.x+ca*lx-sa*ly; m.y=sk.y+sa*lx+ca*ly; m.head=sk.head; }
+      m.dist=sk.dist+i*.3; m.pose='glide'; m.z=0; m.v=6; if(i>0) rigUpdate(dt,t-i*.07,m); }); TEAM[0]=TEAM[0]; }
+  P={els:[],notes:[],spb:.5,endT:1e9,bt:b=>b*.5,bidx:t=>Math.floor(t/.5),barLen:3,barPh:0,label:'',pair:mode==='pair',team:mode==='team',idle:true};
+  if(mode==='team') TEAM[0]=Object.assign(sk,{look:sk.look||avLook()}); render(t,now); P=null;
 }
 setInterval(()=>{if(state==='play')scheduleMusic();},60);
 setInterval(()=>{if(state==='play')update(0);},250); // keep judging when tab throttled... harmless
