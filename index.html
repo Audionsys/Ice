@@ -2170,7 +2170,7 @@ let V2G=null, V2L=0;
 let V2B=null;
 function v2Mask(u){ const t=new THREE.TextureLoader().load(u); t.flipY=false; t.colorSpace=THREE.NoColorSpace; return t; }
 const V2HAIR={}, V2HAIRF={bun:'v3hair_bun',braid:'v3hair_braid',open:'v3hair_open',bob:'v3hair_bob'}; let V2LDR=null;
-function v2HairStyle(LK){ const st=LK&&LK.style; return st==='twobuns'?'bun':(st||'pony'); }
+function v2HairStyle(LK){ const st=LK&&LK.style; return st==='twobuns'?'bun':st==='open'?'pony':(st||'pony'); }
 function v2HairNeed(st){ if(!V2G||st==='pony'||V2HAIR[st]||!V2HAIRF[st]||!V2LDR) return; V2HAIR[st]='loading';
   V2LDR.getJ('model/'+V2HAIRF[st]+'.json').then(js=>V2LDR.parse(js)).then(gl=>{ gl.scene.updateMatrixWorld(true); const sks=[]; gl.scene.traverse(o=>{if(o.isSkinnedMesh)sks.push(o);});
     const parts=[]; for(const o of sks){ const pg=o.geometry.clone(); pg.applyMatrix4(o.matrixWorld); pg.deleteAttribute('tangent'); const map=o.skeleton.bones.map(bb=>V2G.ix[bb.name.replace(/^mixamorig:?/,'')]??0), si2=pg.attributes.skinIndex;
@@ -2704,7 +2704,7 @@ function buildAvatarPanel(){
    <div class="row"><div class="lab">LIPPEN</div>${sw('lips',AV_OPT.lips)}</div>
    ${sec('Haare')}
    <div class="row"><div class="lab">HAARFARBE</div>${sw('hair',AV_OPT.hair)}</div>
-   <div class="row"><div class="lab">FRISUR</div>${[[1,'Pferdeschwanz'],[0,'Dutt'],[2,'Zopf'],[5,'Offen'],[4,'Bob']].map(([v,n])=>`<button class="chip${AV.style===v?' on':''}" data-k="style" data-v="${v}">${n}</button>`).join('')}</div>
+   <div class="row"><div class="lab">FRISUR</div>${[[1,'Pferdeschwanz'],[0,'Dutt'],[2,'Zopf'],[4,'Bob']].map(([v,n])=>`<button class="chip${AV.style===v?' on':''}" data-k="style" data-v="${v}">${n}</button>`).join('')}</div>
    <div class="row" style="opacity:.6;font-size:12px">Brille, Ohrringe und Sommersprossen folgen.</div>
    ${sec('Kostüm')}
    <div class="row"><div class="lab">FARBE</div>${Object.entries(COSTUMES).map(([k,c])=>`<span class="sw cosw${costume===k?' on':''}" data-c="${k}" title="${c.n}" style="background:linear-gradient(135deg,${c.v2||c.d1} 55%,${c.v2s||'#ffffff'} 56%)"></span>`).join('')}</div>
