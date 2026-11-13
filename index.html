@@ -127,7 +127,7 @@ td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
 
 <script>
 "use strict";
-let THREE=null, R3=null, use3D=true, useGrace=true; try{use3D=localStorage.getItem('eiskuer_3d')!=='0';}catch(e){}
+let THREE=null, R3=null, use3D=true, useGrace=true; // 3D ist jetzt immer an (2D-Modus entfernt)
 // ---------- Basics ----------
 const TAU=Math.PI*2, PI=Math.PI;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -2143,7 +2143,7 @@ function poseGrace(m,mod,J,sc,mirror){ // J: unge­spiegelte Weltgelenke
 }
 
 // ---------- Figuren V2: echtes Mixamo-Skelett (Meshy, gerigged) ----------
-let figMode='classic'; try{figMode=localStorage.getItem('eiskuer_fig')||'classic';}catch(e){}
+let figMode='v2'; // Classic entfernt
 let V2G=null, V2L=0;
 let V2B=null;
 function loadV2(){ if(V2G||V2L) return; V2L=1;
@@ -2738,11 +2738,9 @@ function buildMenu(){
   h+=`<div class="sec">4 · Oder Musik wählen</div><div class="sgrid">${SONGS.map((S,si)=>{const b=bestOf(si,lvSel);return `<button class="lv sg" data-s="${si}"><b>🎵 ${S.name}</b><span>${songSub(S)}</span>${b?`<i>Bestwert ${b.toFixed(1)}</i>`:''}</button>`;}).join('')}
      <label class="lv up" style="margin:0;padding:11px 12px"><input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" id="upl" hidden><b>➕ Eigener Song</b><span style="display:block;font-size:11px;opacity:.75;margin-top:3px">MP3 laden – wird automatisch choreografiert</span></label></div><div id="msg" style="opacity:.85;margin-top:6px"></div>`;
   document.getElementById('lvls').innerHTML=h;
-  document.getElementById('gfx').innerHTML=`<b>🎥 Grafik</b><div class="lvrow"><button class="lv gx${use3D?' on':''}" data-g="1"><b>3D</b><span>Echte Figuren, Licht & Kamera</span></button><button class="lv gx${!use3D?' on':''}" data-g="0"><b>2D</b><span>Für ältere Geräte</span></button></div><b>🎵 Haltenoten</b> <span style="opacity:.65;font-size:12px">(bei Pirouetten & Hebungen gedrückt halten)</span><div class="lvrow"><button class="lv hld${holdOn?' on':''}" data-h="1"><b>An</b><span>Wie bei O2Jam</span></button><button class="lv hld${!holdOn?' on':''}" data-h="0"><b>Aus</b><span>Nur Tippen</span></button></div><b>🔦 Verfolger-Spot</b> <span style="opacity:.65;font-size:12px">(Einzellauf & Paarlauf, nur 3D)</span><div class="lvrow"><button class="lv fsp${followSpot?' on':''}" data-f="1"><b>An</b><span>Halle abgedunkelt, Spot folgt</span></button><button class="lv fsp${!followSpot?' on':''}" data-f="0"><b>Aus</b><span>Normale Hallenbeleuchtung</span></button></div>`;
+  document.getElementById('gfx').innerHTML=`<b>🎵 Haltenoten</b> <span style="opacity:.65;font-size:12px">(bei Pirouetten & Hebungen gedrückt halten)</span><div class="lvrow"><button class="lv hld${holdOn?' on':''}" data-h="1"><b>An</b><span>Wie bei O2Jam</span></button><button class="lv hld${!holdOn?' on':''}" data-h="0"><b>Aus</b><span>Nur Tippen</span></button></div><b>🔦 Verfolger-Spot</b> <span style="opacity:.65;font-size:12px">(Einzellauf & Paarlauf, nur 3D)</span><div class="lvrow"><button class="lv fsp${followSpot?' on':''}" data-f="1"><b>An</b><span>Halle abgedunkelt, Spot folgt</span></button><button class="lv fsp${!followSpot?' on':''}" data-f="0"><b>Aus</b><span>Normale Hallenbeleuchtung</span></button></div>`;
   document.getElementById('upl').onchange=e=>loadCustom(e.target.files[0]);
   {const gx=document.getElementById('gfx'); gx.insertAdjacentHTML('beforeend',`<b>⛸️ Logo im Mittelkreis</b><div class="lvrow">${[['bees','🐝 Mini Ice Bees'],['audionsys','🎧 Audionsys'],['none','Ohne']].map(([k,n])=>`<button class="lv clg${k===cLogo?' on':''}" data-l="${k}"><b>${n}</b></button>`).join('')}</div>`);
-   gx.insertAdjacentHTML('beforeend',`<b>🧍 Figuren</b> <span style="opacity:.65;font-size:12px">(V2 = neues Modell mit echtem Skelett, im Aufbau)</span><div class="lvrow">${[['classic','Classic','bisherige Figuren'],['v2','V2 (Test)','neue Läuferin']].map(([k,n,d])=>`<button class="lv fgm${k===figMode?' on':''}" data-f="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`);
-   gx.querySelectorAll('.fgm').forEach(b=>b.onclick=()=>{figMode=b.dataset.f;try{localStorage.setItem('eiskuer_fig',figMode);}catch(e){} if(figMode==='v2')loadV2(); if(R3){for(const [mm,e] of R3.models){for(const k in e)R3.scene.remove(e[k].grp);} R3.models.clear();} buildMenu();const sb=document.getElementById('setBox');if(sb)sb.open=true;});
    gx.insertAdjacentHTML('beforeend',`<b>👥 Zuschauer</b> <span style="opacity:.65;font-size:12px">(weniger = flüssiger auf älteren Geräten)</span><div class="lvrow">${[['full','Volle Halle'],['half','Halb voll'],['off','Aus']].map(([k,n])=>`<button class="lv crw${k===crowdMode?' on':''}" data-c="${k}"><b>${n}</b></button>`).join('')}</div>`);
    gx.querySelectorAll('.crw').forEach(b=>b.onclick=()=>{crowdMode=b.dataset.c;try{localStorage.setItem('eiskuer_crowd',crowdMode);}catch(e){}applyCrowd();buildMenu();const sb=document.getElementById('setBox');if(sb)sb.open=true;});
    gx.querySelectorAll('.clg').forEach(b=>b.onclick=()=>{cLogo=b.dataset.l;try{localStorage.setItem('eiskuer_clogo',cLogo);}catch(e){}applyCenterLogo();buildMenu();const sb=document.getElementById('setBox');if(sb)sb.open=true;});}
@@ -2767,6 +2765,8 @@ async function startLevel(si,i,btn){
     try{await ensureSong(S);buf=await getBuf(S);}catch(e){S.err=true;starting=false;if(btn)btn.innerHTML=btn.dataset.old;const m=document.getElementById('msg');if(m)m.textContent='Die Musik konnte nicht geladen werden.';return;}
     if(btn&&btn.dataset.old) btn.innerHTML=btn.dataset.old;
   }
+  if(R3&&V2L&&(!V2G||!V2B)){ const ob=btn&&btn.innerHTML; if(btn) btn.innerHTML='<b>⏳ Figuren laden…</b><span>einen Moment</span>';
+    await new Promise(r=>{const iv=setInterval(()=>{if((V2G&&V2B)||!V2L){clearInterval(iv);r();}},200);}); if(btn&&ob) btn.innerHTML=ob; }
   stopSong(); for(const X of SONGS) if(X!==S) X.buf=null;
   curSong=si; curLevel=i; L=S.levels[i]; P=S.F?buildSongProgram(S,L):buildProgram(L); HOLD.fill(null); if(holdOn&&!P.team) addHolds(P);
   combo=maxCombo=tes=deduct=falls=0; judg=null; popups=[]; parts=[]; bursts=[]; excite=0; fx.conf=[];fx.rings=[];fx.banner=null;fx.zoom=fx.zoomT=1;fx.beam=fx.flash=fx.shake=0; syncD.length=0; REC.fr=[];REC.ev=[];REC.last=-1; P.resHTML=null;
