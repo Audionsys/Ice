@@ -1042,8 +1042,8 @@ function update(dt){
 }
 
 // ---------- Drawing: skater (3D-Rig, von oben und von der Seite) ----------
-const COSTUMES={bees:{n:'Mini Ice Bees',d1:'#1b1b1b',d2:'#f5c518',sk:['#ffe27a','#f5c518','#141414'],sp:'#fff6c8'},pink:{n:'Glitzer-Pink',d1:'#d81b60',d2:'#b0164f',sk:['#ff6fb5','#d0206a','#7b1fa2'],sp:'#ffffff'},ice:{n:'Eisblau',d1:'#1e88e5',d2:'#0d47a1',sk:['#bfe9ff','#4fc3f7','#1a237e'],sp:'#ffffff'},
- green:{n:'Formation Grün',d1:'#1d6a43',d2:'#c9ced6',sk:['#3a9a68','#1f6b45','#0f3d27'],sp:'#ffffff',long:true,sleeve:'#e6c49b',yoke:true,scr:'#1f6b45'}};
+const COSTUMES={bees:{n:'Mini Ice Bees',v2:'#151515',v2s:'#f5c518',d1:'#1b1b1b',d2:'#f5c518',sk:['#ffe27a','#f5c518','#141414'],sp:'#fff6c8'},pink:{n:'Glitzer-Pink',d1:'#d81b60',d2:'#b0164f',sk:['#ff6fb5','#d0206a','#7b1fa2'],sp:'#ffffff'},royal:{n:'Royalblau',v2:'#1e3fa8',d1:'#1e3fa8',d2:'#0d2a7a',sk:['#5c7cf0','#1e3fa8','#0d1b52'],sp:'#ffffff'},ice:{n:'Eisblau',v2:'#3aa0f0',d1:'#1e88e5',d2:'#0d47a1',sk:['#bfe9ff','#4fc3f7','#1a237e'],sp:'#ffffff'},
+ green:{n:'Grün',v2:'#1f8a50',d1:'#1d6a43',d2:'#c9ced6',sk:['#3a9a68','#1f6b45','#0f3d27'],sp:'#ffffff',long:true,sleeve:'#e6c49b',yoke:true,scr:'#1f6b45'}};
 let costume='bees'; try{costume=localStorage.getItem('eiskuer_costume')||'bees';}catch(e){} if(!COSTUMES[costume])costume='bees';
 const SKIN='#f2c4a2',LEG='#e9b896',HAIR='#5a321b',HAIR2='#3d2111',OUTL='rgba(50,15,45,.55)';
 const LOOK0={skin:SKIN,leg:LEG,hair:HAIR,hair2:HAIR2,h:1,style:'bun'};
@@ -2250,7 +2250,11 @@ function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; m
   mod.sm=sm; mod.v2b=bones; mod.v2boot=boot; mod.v2U=U; mod.smU=null; mod.v2D=bones.map(()=>new THREE.Quaternion()); mod.v2P=bones.map(()=>new THREE.Vector3());
   if(D.hairG){ const hm=new THREE.MeshStandardMaterial({color:'#7a4a2a',roughness:.48,metalness:0}); if(mirror){hm.transparent=true;hm.opacity=.2;hm.depthWrite=false;}
     const hair=new THREE.SkinnedMesh(D.hairG,hm); hair.bindMode='detached'; hair.bind(skel,new THREE.Matrix4()); hair.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); hair.frustumCulled=false; hair.castShadow=!mirror; mod.grp.add(hair); mod.v2hair=hair; }
-  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(mirror){pm.transparent=true;pm.opacity=.2;pm.depthWrite=false;}
+  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(/outfit|mieder|rock/i.test(p.name)){ const CU={uMain:{value:new THREE.Color('#1e3fa8')},uSpk:{value:new THREE.Color('#ffffff')}}; (mod.v2cos=mod.v2cos||[]).push(CU);
+        pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,CU); sh.fragmentShader='uniform vec3 uMain,uSpk;\n'+sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
+          { vec3 c=diffuseColor.rgb; float lum=dot(c,vec3(0.3,0.59,0.11)); float bl=smoothstep(0.015,0.06,c.b-max(c.r,c.g));
+            float spk=smoothstep(0.35,0.7,min(c.r,min(c.g,c.b)))*(1.0-bl*0.5);
+            vec3 r=mix(c,uMain*clamp(lum/0.045,0.25,2.4),bl); r=mix(r,uSpk*clamp(lum*1.15,0.0,1.4),spk); diffuseColor.rgb=r; }`); }; pm.customProgramCacheKey=()=>'v2cos'; } if(mirror){pm.transparent=true;pm.opacity=.2;pm.depthWrite=false;}
       const pme=new THREE.SkinnedMesh(p.g,pm); pme.bindMode='detached'; pme.bind(skel,new THREE.Matrix4()); pme.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); pme.frustumCulled=false; pme.castShadow=!mirror; mod.grp.add(pme); mod.v2parts.push(pme); } }
   mod.v2Mat=mat; makeSoftSkirt(mod,mirror); }
 function v2Blades(mod,mirror,s,hb){ if(mod.v2bl&&Math.abs(mod.v2bl.hb-hb)<.002) return; const D=mod.v2G;
@@ -2308,7 +2312,7 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
   mod.v2r=[D.waist[0]*s*1.12,D.waist[1]*s*1.15];
   if(!mirror){(mod.ftL||(mod.ftL=new THREE.Vector3())).copy(P[lf]); (mod.ftR||(mod.ftR=new THREE.Vector3())).copy(P[rf]);}
 }
-function v2Colors(mod,LK,CO){ if(!mod.v2G.boy) mod.v2U.uSuit.value.set(CO.d1||'#ffffff'); if(mod.v2hair&&LK.hair){ mod.v2hair.material.color.set(LK.hair); mod.v2U.uScalp.value.set(LK.hair).multiplyScalar(.8); mod.v2U.uScalpOn.value=1; } }
+function v2Colors(mod,LK,CO){ if(mod.v2cos) for(const CU of mod.v2cos){ CU.uMain.value.set(CO.v2||CO.d1||'#1e3fa8'); CU.uSpk.value.set(CO.v2s||'#ffffff'); } if(!mod.v2G.boy) mod.v2U.uSuit.value.set(CO.d1||'#ffffff'); if(mod.v2hair&&LK.hair){ mod.v2hair.material.color.set(LK.hair); mod.v2U.uScalp.value.set(LK.hair).multiplyScalar(.8); mod.v2U.uScalpOn.value=1; } }
 
 // ---------- Modellierter Kopf + Haarschale ----------
 let HEADGEO=null, HAIRGEO=null;
