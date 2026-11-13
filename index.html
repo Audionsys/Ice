@@ -778,6 +778,15 @@ function songTime(){return AC?acNow(false)-t0-audLat():0;}
 function songTimeExact(){return AC?acNow(true)-t0-audLat():0;}
 
 // ---------- Input / judging ----------
+function addHolds(P){ // Pirouetten und Hebungen: einzelne Noten werden zu Haltenoten
+  const byLane=[[],[],[],[]]; for(const n of P.notes) byLane[n.lane].push(n);
+  for(const el of P.els){ if(el.type!=='spin'&&el.type!=='lift') continue; let k=0;
+    for(const n of el.notes){ if(n.take||n.b===undefined) continue; const ln=byLane[n.lane], j=ln.indexOf(n), nx=ln[j+1];
+      const gapB=nx?nx.b-n.b:4, lenB=Math.min(2,gapB-.75); if(lenB<1||(k++)%2) continue;
+      const tE=P.bt?P.bt(n.b+lenB):n.t+lenB*(n.t/Math.max(n.b,1e-3)); if(tE<=n.t+.25) continue; n.hold=true; n.tEnd=tE; } } }
+function release(lane){ const n=HOLD[lane]; if(!n||state!=='play') return; const t=songTimeExact()-syncOff; HOLD[lane]=null;
+  if(t<n.tEnd-.15){ n.holdFail=true; combo=0; n.el.bad++; judg={txt:'LOSGELASSEN',r:3,t:performance.now()}; } else holdDone(n); }
+function holdDone(n){ n.holdOK=true; HOLD[n.lane]=null; bursts.push({lane:n.lane,t:performance.now(),r:0}); judg={txt:'GEHALTEN!',r:0,t:performance.now()}; chime(n.lane); }
 function press(lane){
   if(state!=='play') return;
   flash[lane]=1; const t=songTimeExact()-syncOff; let best=null,bd=1e9;
@@ -791,7 +800,7 @@ function grade(n,d,t){
   if(combo%25===0) milestone(combo);
   let txt=['PERFEKT','GUT','OK'][r]; if(r>0) txt+=d<0?' · früh':' · spät';
   if(n.take&&d>L.win[1]) txt='ZU SPÄT!'; else if(n.take&&d>L.win[0]) txt='Absprung spät';
-  judg={txt,r,t:performance.now()}; chime(n.lane);
+  judg={txt,r,t:performance.now()}; chime(n.lane); if(n.hold){ n.holding=true; HOLD[n.lane]=n; }
   bursts.push({lane:n.lane,t:performance.now(),r});
   onNote(n,t);
 }
@@ -808,6 +817,7 @@ function onNote(n,t){
   if(el.type==='spin'&&el.bad>=Math.ceil(el.notes.length/2)&&!el.broken){el.broken=true;sk.stumbleT=t;addPop('Pirouette verloren','#ffb0b0');}
 }
 const KEYS={ArrowLeft:0,ArrowDown:1,ArrowUp:2,ArrowRight:3,KeyD:0,KeyF:1,KeyJ:2,KeyK:3,KeyA:0,KeyS:1,KeyW:2};
+addEventListener('keyup',e=>{ const l=KEYS[e.code]; if(l!==undefined) release(l); });
 addEventListener('keydown',e=>{
   if(state==='entry'){if((e.code==='Enter'||e.code==='Space')&&document.getElementById('readyGo').style.display!=='none'){e.preventDefault();window.__auto=false;window.__watch=false;startCountdown();}return;}
   if(state==='replay'){if(e.code==='Escape'||e.code==='Enter')endReplay();else if(e.code==='ArrowRight')replayNext();else if(e.code==='ArrowLeft')seekReplay(rpTime()-8);return;}
@@ -819,8 +829,9 @@ cv.addEventListener('pointerdown',e=>{
   if(state==='paused'){togglePause();return;}
   const x=e.clientX,y=e.clientY;
   if(state==='replay'){replayTap(x,y);return;}
-  if(x>=HW.x&&y>=HW.y&&y<=HW.y+HW.h&&x<=HW.x+HW.w){press(clamp(Math.floor((x-lanesX)/laneW),0,3));}
+  if(x>=HW.x&&y>=HW.y&&y<=HW.y+HW.h&&x<=HW.x+HW.w){const l=clamp(Math.floor((x-lanesX)/laneW),0,3); PTR[e.pointerId]=l; press(l);}
 });
+for(const ev of ['pointerup','pointercancel']) cv.addEventListener(ev,e=>{ const l=PTR[e.pointerId]; if(l!==undefined){ delete PTR[e.pointerId]; release(l); } });
 document.getElementById('pz').onclick=togglePause;
 document.getElementById('resume').onclick=togglePause;
 document.getElementById('quit').onclick=()=>{document.getElementById('pause').classList.add('hide');toMenu();};
@@ -991,6 +1002,7 @@ function update(dt){
   if(window.__auto){for(const n of P.notes){if(!n.judged&&t>=n.t){const d=window.__late&&n.take?.2:0; if(t>=n.t+d){ if(window.__watch) flash[n.lane]=1; grade(n,d,t);}}}}
   if(window.__autoPress!==undefined){for(const n of P.notes){if(n.t-t>1)break;if(!n.judged&&!n.pp&&t>=n.t+window.__autoPress+(Math.random()-.5)*.06){n.pp=1;press(n.lane);}}}
   for(const n of P.notes){ if(n.t-t>1) break; if(!n.judged&&t-syncOff-n.t>L.win[2]) miss(n,t); }
+  for(let i=0;i<4;i++){ const h=HOLD[i]; if(h){ if(t>=h.tEnd) holdDone(h); else flash[i]=Math.max(flash[i],.6); } }
   if(P.team) return updateTeam(dt,t);
   let vT=7.2,pose='glide',faceT=0,z=0,spinning=false,air=false,dAng=0,spinPose=null;
   for(const el of P.els){
@@ -1585,6 +1597,8 @@ function drawHighway(t,now){
   // notes
   for(let i=P.notes.length-1;i>=0;i--){
     const n=P.notes[i]; const rpm=state==='replay';
+    if(n.hold&&!rpm){ const act=n.judged&&n.holding&&!n.holdOK&&!n.holdFail; if(!n.judged||act){ const cx=lanesX+n.lane*laneW+laneW/2, y1=act?hitY:Y(n.t), y2=Math.max(Y(n.tEnd),y-10);
+        if(y1>y2&&y2<hitY+laneW){ g.fillStyle=LCOL[n.lane]; g.globalAlpha=act?.75:.45; g.fillRect(cx-laneW*.17,y2,laneW*.34,y1-y2); g.globalAlpha=1; g.fillStyle='#fff'; g.fillRect(cx-laneW*.17,y2,laneW*.34,3); } } }
     if(rpm?(n.tr!==undefined&&t>=n.tr&&n.res<3):n.judged) continue;
     if(rpm&&n.res===3&&t>n.t+.45) continue;
     const yy=Y(n.t); if(yy<y-laneW||yy>hitY+laneW*1.2) continue;
@@ -2697,6 +2711,8 @@ let curSong=0;
 const bkey=(si,li)=>'eiskuer_best_'+SONGS[si].id+'_'+li+(mode==='team'?'_team':mode==='pair'?'_pair':'');
 function bestOf(si,li){try{return +localStorage.getItem(bkey(si,li))||0;}catch(e){return 0;}}
 function setBest(si,li,v){try{localStorage.setItem(bkey(si,li),v);}catch(e){}}
+let holdOn=false; try{holdOn=localStorage.getItem('eiskuer_hold')==='1';}catch(e){}
+const HOLD=[null,null,null,null], PTR={};
 let followSpot=false; try{followSpot=localStorage.getItem('eiskuer_fspot')==='1';}catch(e){}
 let lvSel=1; try{lvSel=clamp(+(localStorage.getItem('eiskuer_lv')??1),0,2);}catch(e){}
 let avPic=null; try{avPic=localStorage.getItem('eiskuer_avpic');}catch(e){}
@@ -2722,7 +2738,7 @@ function buildMenu(){
   h+=`<div class="sec">4 · Oder Musik wählen</div><div class="sgrid">${SONGS.map((S,si)=>{const b=bestOf(si,lvSel);return `<button class="lv sg" data-s="${si}"><b>🎵 ${S.name}</b><span>${songSub(S)}</span>${b?`<i>Bestwert ${b.toFixed(1)}</i>`:''}</button>`;}).join('')}
      <label class="lv up" style="margin:0;padding:11px 12px"><input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" id="upl" hidden><b>➕ Eigener Song</b><span style="display:block;font-size:11px;opacity:.75;margin-top:3px">MP3 laden – wird automatisch choreografiert</span></label></div><div id="msg" style="opacity:.85;margin-top:6px"></div>`;
   document.getElementById('lvls').innerHTML=h;
-  document.getElementById('gfx').innerHTML=`<b>🎥 Grafik</b><div class="lvrow"><button class="lv gx${use3D?' on':''}" data-g="1"><b>3D</b><span>Echte Figuren, Licht & Kamera</span></button><button class="lv gx${!use3D?' on':''}" data-g="0"><b>2D</b><span>Für ältere Geräte</span></button></div><b>🔦 Verfolger-Spot</b> <span style="opacity:.65;font-size:12px">(Einzellauf & Paarlauf, nur 3D)</span><div class="lvrow"><button class="lv fsp${followSpot?' on':''}" data-f="1"><b>An</b><span>Halle abgedunkelt, Spot folgt</span></button><button class="lv fsp${!followSpot?' on':''}" data-f="0"><b>Aus</b><span>Normale Hallenbeleuchtung</span></button></div>`;
+  document.getElementById('gfx').innerHTML=`<b>🎥 Grafik</b><div class="lvrow"><button class="lv gx${use3D?' on':''}" data-g="1"><b>3D</b><span>Echte Figuren, Licht & Kamera</span></button><button class="lv gx${!use3D?' on':''}" data-g="0"><b>2D</b><span>Für ältere Geräte</span></button></div><b>🎵 Haltenoten</b> <span style="opacity:.65;font-size:12px">(bei Pirouetten & Hebungen gedrückt halten)</span><div class="lvrow"><button class="lv hld${holdOn?' on':''}" data-h="1"><b>An</b><span>Wie bei O2Jam</span></button><button class="lv hld${!holdOn?' on':''}" data-h="0"><b>Aus</b><span>Nur Tippen</span></button></div><b>🔦 Verfolger-Spot</b> <span style="opacity:.65;font-size:12px">(Einzellauf & Paarlauf, nur 3D)</span><div class="lvrow"><button class="lv fsp${followSpot?' on':''}" data-f="1"><b>An</b><span>Halle abgedunkelt, Spot folgt</span></button><button class="lv fsp${!followSpot?' on':''}" data-f="0"><b>Aus</b><span>Normale Hallenbeleuchtung</span></button></div>`;
   document.getElementById('upl').onchange=e=>loadCustom(e.target.files[0]);
   {const gx=document.getElementById('gfx'); gx.insertAdjacentHTML('beforeend',`<b>⛸️ Logo im Mittelkreis</b><div class="lvrow">${[['bees','🐝 Mini Ice Bees'],['audionsys','🎧 Audionsys'],['none','Ohne']].map(([k,n])=>`<button class="lv clg${k===cLogo?' on':''}" data-l="${k}"><b>${n}</b></button>`).join('')}</div>`);
    gx.insertAdjacentHTML('beforeend',`<b>🧍 Figuren</b> <span style="opacity:.65;font-size:12px">(V2 = neues Modell mit echtem Skelett, im Aufbau)</span><div class="lvrow">${[['classic','Classic','bisherige Figuren'],['v2','V2 (Test)','neue Läuferin']].map(([k,n,d])=>`<button class="lv fgm${k===figMode?' on':''}" data-f="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`);
@@ -2730,6 +2746,7 @@ function buildMenu(){
    gx.insertAdjacentHTML('beforeend',`<b>👥 Zuschauer</b> <span style="opacity:.65;font-size:12px">(weniger = flüssiger auf älteren Geräten)</span><div class="lvrow">${[['full','Volle Halle'],['half','Halb voll'],['off','Aus']].map(([k,n])=>`<button class="lv crw${k===crowdMode?' on':''}" data-c="${k}"><b>${n}</b></button>`).join('')}</div>`);
    gx.querySelectorAll('.crw').forEach(b=>b.onclick=()=>{crowdMode=b.dataset.c;try{localStorage.setItem('eiskuer_crowd',crowdMode);}catch(e){}applyCrowd();buildMenu();const sb=document.getElementById('setBox');if(sb)sb.open=true;});
    gx.querySelectorAll('.clg').forEach(b=>b.onclick=()=>{cLogo=b.dataset.l;try{localStorage.setItem('eiskuer_clogo',cLogo);}catch(e){}applyCenterLogo();buildMenu();const sb=document.getElementById('setBox');if(sb)sb.open=true;});}
+  document.querySelectorAll('.hld').forEach(b=>b.onclick=()=>{holdOn=b.dataset.h==='1';try{localStorage.setItem('eiskuer_hold',holdOn?'1':'0');}catch(e){}buildMenu();document.getElementById('setBox').open=true;});
   document.querySelectorAll('.fsp').forEach(b=>b.onclick=()=>{followSpot=b.dataset.f==='1';try{localStorage.setItem('eiskuer_fspot',followSpot?'1':'0');}catch(e){}buildMenu();document.getElementById('setBox').open=true;});
   document.querySelectorAll('.gx').forEach(b=>b.onclick=()=>{use3D=b.dataset.g==='1';try{localStorage.setItem('eiskuer_3d',use3D?'1':'0');}catch(e){}document.getElementById('c3').style.display=use3D&&R3?'block':'none';if(use3D)load3D();buildMenu();});
   document.getElementById('avOpen').onclick=openAvatar; document.getElementById('avPic').onclick=openAvatar;
@@ -2751,7 +2768,7 @@ async function startLevel(si,i,btn){
     if(btn&&btn.dataset.old) btn.innerHTML=btn.dataset.old;
   }
   stopSong(); for(const X of SONGS) if(X!==S) X.buf=null;
-  curSong=si; curLevel=i; L=S.levels[i]; P=S.F?buildSongProgram(S,L):buildProgram(L);
+  curSong=si; curLevel=i; L=S.levels[i]; P=S.F?buildSongProgram(S,L):buildProgram(L); HOLD.fill(null); if(holdOn&&!P.team) addHolds(P);
   combo=maxCombo=tes=deduct=falls=0; judg=null; popups=[]; parts=[]; bursts=[]; excite=0; fx.conf=[];fx.rings=[];fx.banner=null;fx.zoom=fx.zoomT=1;fx.beam=fx.flash=fx.shake=0; syncD.length=0; REC.fr=[];REC.ev=[];REC.last=-1; P.resHTML=null;
   tg.clearRect(0,0,tr.width,tr.height); resetSkater(); if(P.team) initTeam();
   P.buf=buf; lastT=0; startEntry();
