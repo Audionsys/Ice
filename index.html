@@ -1076,7 +1076,7 @@ function avParse(code){const m=String(code||'').trim().toUpperCase().match(/^EK1
   const max={skin:AV_OPT.skin.length,hair:AV_OPT.hair.length,style:6,eye:AV_OPT.eye.length,lips:AV_OPT.lips.length,frk:2,blush:2,glass:2,scr:AV_OPT.scr.length,h:AV_OPT.h.length};
   for(let i=0;i<10;i++){const v=parseInt(m[1][i],36),k=AV_KEYS[i];if(!(v>=0&&v<max[k]))return null;o[k]=v;}return o;}
 try{const sv=avParse(localStorage.getItem('eiskuer_avatar'));if(sv)AV=sv;}catch(e){}
-function avLook(){const h=AV_OPT.hair[AV.hair];return {skin:AV_OPT.skin[AV.skin],leg:AV_OPT.skin[AV.skin],hair:h,hair2:shade(h,-.22),h:AV_OPT.h[AV.h],style:AV.style===4?"bun":AV_OPT.style[AV.style],
+function avLook(){const h=AV_OPT.hair[AV.hair];return {skin:AV_OPT.skin[AV.skin],leg:AV_OPT.skin[AV.skin],hair:h,hair2:shade(h,-.22),h:AV_OPT.h[AV.h],style:AV_OPT.style[AV.style],
   eye:AV_OPT.eye[AV.eye],lips:AV_OPT.lips[AV.lips],frk:!!AV.frk,blush:!!AV.blush,glass:!!AV.glass,scr:AV_OPT.scr[AV.scr],avatar:true};}
 function avApply(){const lk=avLook(); sk.look=lk; if(TEAM[0]) TEAM[0].look=lk; if(R3){refreshModel(sk); if(TEAM[0]) refreshModel(TEAM[0]);} try{localStorage.setItem('eiskuer_avatar',avCode());}catch(e){}}
 const V=(f,u,s)=>[f,u,s], add3=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], lerp3=(a,b,k)=>[a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k,a[2]+(b[2]-a[2])*k];
@@ -1776,7 +1776,7 @@ function makeModel3D(m,mirror){
     const len=.62+.38*back, yy=.5-(.5-y)*len; const w=1+.04*Math.sin(a*9)*(.5-y); p2.setY(i,yy); p2.setX(i,p2.getX(i)*w); p2.setZ(i,p2.getZ(i)*w);}
   sk2.computeVertexNormals(); const skL=add('skirtL',sk2,M.skirt);
   const belt=add('belt',new THREE.TorusGeometry(1,.06,6,seg+8),M.trim);
-  const mod={grp,P3,M,mats,mirror,costume:null}; if(m.boy){ if(figMode==='v2'&&V2B&&useGrace) v2Mesh(mod,mirror,V2B); else if(BOYG&&useGrace) boyMesh(mod,mirror); } else if(figMode==='v2'&&V2G&&useGrace) v2Mesh(mod,mirror); else if(GRACE&&useGrace) graceMesh(mod,mirror,lo?'lo':'hi'); R3.scene.add(grp); return mod;
+  const mod={grp,P3,M,mats,mirror,costume:null,look:LK}; if(m.boy){ if(figMode==='v2'&&V2B&&useGrace) v2Mesh(mod,mirror,V2B); else if(BOYG&&useGrace) boyMesh(mod,mirror); } else if(figMode==='v2'&&V2G&&useGrace) v2Mesh(mod,mirror); else if(GRACE&&useGrace) graceMesh(mod,mirror,lo?'lo':'hi'); R3.scene.add(grp); return mod;
 }
 function refreshModel(m){if(!R3)return;const e=R3.models.get(m);if(e){for(const k in e){R3.scene.remove(e[k].grp);}R3.models.delete(m);}}
 // Eiskunstlauf-Schlittschuh: hoher weißer Stiefel, grauer Polsterrand, Schnürung, brauner Absatz, Kufe mit Zacke
@@ -2148,11 +2148,18 @@ let figMode='v2'; // Classic entfernt
 let V2G=null, V2L=0;
 let V2B=null;
 function v2Mask(u){ const t=new THREE.TextureLoader().load(u); t.flipY=false; t.colorSpace=THREE.NoColorSpace; return t; }
+const V2HAIR={}, V2HAIRF={bun:'v3hair_bun',braid:'v3hair_braid',open:'v3hair_open',bob:'v3hair_bob'}; let V2LDR=null;
+function v2HairStyle(LK){ const st=LK&&LK.style; return st==='twobuns'?'bun':(st||'pony'); }
+function v2HairNeed(st){ if(!V2G||st==='pony'||V2HAIR[st]||!V2HAIRF[st]||!V2LDR) return; V2HAIR[st]='loading';
+  V2LDR.getJ('model/'+V2HAIRF[st]+'.json').then(js=>V2LDR.parse(js)).then(gl=>{ gl.scene.updateMatrixWorld(true); const sks=[]; gl.scene.traverse(o=>{if(o.isSkinnedMesh)sks.push(o);});
+    const parts=[]; for(const o of sks){ const pg=o.geometry.clone(); pg.applyMatrix4(o.matrixWorld); pg.deleteAttribute('tangent'); const map=o.skeleton.bones.map(bb=>V2G.ix[bb.name.replace(/^mixamorig:?/,'')]??0), si2=pg.attributes.skinIndex;
+      for(let v=0;v<si2.count;v++) for(let j=0;j<4;j++){ const k=j===0?si2.getX(v):j===1?si2.getY(v):j===2?si2.getZ(v):si2.getW(v); si2.setComponent(v,j,map[k]); } parts.push({g:pg,mat:o.material,name:'Haar_'+st}); }
+    V2HAIR[st]=parts; if(R3){for(const [mm,e] of R3.models){for(const k in e)R3.scene.remove(e[k].grp);} R3.models.clear();} }).catch(e=>{console.warn('Frisur',st,e); V2HAIR[st]=null;}); }
 function loadV2(){ if(V2G||V2L) return; V2L=1;
   const getJ=(f)=>fetch(f).then(r=>{if(!r.ok)throw 0;return r.json();});
   const parse=(L,js)=>new Promise((res,rej)=>{ const bs=atob(js.b64), u8=new Uint8Array(bs.length); for(let i=0;i<bs.length;i++)u8[i]=bs.charCodeAt(i); new L.GLTFLoader().parse(u8.buffer,'',res,rej); });
   const reset=()=>{ if(R3){for(const [mm,e] of R3.models){for(const k in e)R3.scene.remove(e[k].grp);} R3.models.clear();} };
-  import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js').then(L=>{
+  import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js').then(L=>{ V2LDR={getJ,parse:js=>parse(L,js)};
     // Komplettmodelle aus Blender: Körper, Haare und Schlittschuhe am selben Skelett
     getJ('model/grace_v3.json').then(js=>parse(L,js)).then(gl=>{ V2G=v2Prepare(gl); V2G.mask=v2Mask('model/grace_maske.png'); V2G.skin0=new THREE.Color(.847,.631,.533); V2G.lip0=new THREE.Color(.796,.443,.384); V2G.iris0=.37; V2G.hair0=new THREE.Color(.43,.25,.13); reset(); return getJ('model/tim_v3.json'); })
       .then(js=>parse(L,js)).then(gl=>{ V2B=v2Prepare(gl); V2B.boy=true; V2B.mask=v2Mask('model/tim_maske.png'); V2B.skin0=new THREE.Color(.969,.706,.573); V2B.lip0=new THREE.Color(.85,.5,.42); V2B.iris0=.06; V2B.hair0=new THREE.Color(.314,.149,.075); reset(); }).catch(e=>{console.warn('V2',e); if(!V2G)V2L=0;}); })
@@ -2272,7 +2279,9 @@ function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; m
   mod.sm=sm; mod.v2b=bones; mod.v2boot=boot; mod.v2U=U; mod.smU=null; mod.v2D=bones.map(()=>new THREE.Quaternion()); mod.v2P=bones.map(()=>new THREE.Vector3());
   if(D.hairG){ const hm=new THREE.MeshStandardMaterial({color:'#7a4a2a',roughness:.48,metalness:0}); if(mirror){hm.transparent=true;hm.opacity=.2;hm.depthWrite=false;}
     const hair=new THREE.SkinnedMesh(D.hairG,hm); hair.bindMode='detached'; hair.bind(skel,new THREE.Matrix4()); hair.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); hair.frustumCulled=false; hair.castShadow=!mirror; mod.grp.add(hair); mod.v2hair=hair; }
-  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; for(const p of D.parts){ const pm=p.mat.clone(); if(/haar|hair/i.test(p.name)){ const HU={uHair:{value:new THREE.Color(1,1,1)},uHair0:{value:(D.hair0||new THREE.Color(.4,.25,.15)).clone()},uHairOn:{value:0}}; mod.v2hairU=HU; pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,HU); sh.fragmentShader='uniform vec3 uHair,uHair0;uniform float uHairOn;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n { float l=dot(diffuseColor.rgb,vec3(0.3,0.59,0.11)), l0=dot(uHair0,vec3(0.3,0.59,0.11)); diffuseColor.rgb=mix(diffuseColor.rgb,clamp(uHair*pow(l/l0,0.8)*1.2,0.0,1.4),uHairOn); }'); }; pm.customProgramCacheKey=()=>'v2hair'; } if(/kufe|stahl/i.test(pm.name||'')){ pm.color.set('#d9dde3'); pm.metalness=.3; pm.roughness=.25; } if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(/outfit|mieder|rock/i.test(p.name)){ const CU={uMain:{value:new THREE.Color('#1e3fa8')},uSpk:{value:new THREE.Color('#ffffff')}}; (mod.v2cos=mod.v2cos||[]).push(CU);
+  if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; const LKm=mod.look||{}, hst=D.boy?'pony':v2HairStyle(LKm); if(!D.boy) v2HairNeed(hst); const hairP=(!D.boy&&hst!=='pony'&&Array.isArray(V2HAIR[hst]))?V2HAIR[hst]:null;
+    const plist=hairP?D.parts.filter(p=>!/haar|hair/i.test(p.name)).concat(hairP):D.parts;
+    for(const p of plist){ const pm=p.mat.clone(); if(/haar|hair/i.test(p.name)){ const HU={uHair:{value:new THREE.Color(1,1,1)},uHair0:{value:(D.hair0||new THREE.Color(.4,.25,.15)).clone()},uHairOn:{value:0}}; mod.v2hairU=HU; pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,HU); sh.fragmentShader='uniform vec3 uHair,uHair0;uniform float uHairOn;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n { float l=dot(diffuseColor.rgb,vec3(0.3,0.59,0.11)), l0=dot(uHair0,vec3(0.3,0.59,0.11)); diffuseColor.rgb=mix(diffuseColor.rgb,clamp(uHair*pow(l/l0,0.8)*1.2,0.0,1.4),uHairOn); }'); }; pm.customProgramCacheKey=()=>'v2hair'; } if(/kufe|stahl/i.test(pm.name||'')){ pm.color.set('#d9dde3'); pm.metalness=.3; pm.roughness=.25; } if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(/outfit|mieder|rock/i.test(p.name)){ const CU={uMain:{value:new THREE.Color('#1e3fa8')},uSpk:{value:new THREE.Color('#ffffff')}}; (mod.v2cos=mod.v2cos||[]).push(CU);
         pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,CU); sh.fragmentShader='uniform vec3 uMain,uSpk;\n'+sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
           { vec3 c=diffuseColor.rgb; float lum=dot(c,vec3(0.3,0.59,0.11)); float bl=smoothstep(0.015,0.06,c.b-max(c.r,c.g));
             float spk=smoothstep(0.35,0.7,min(c.r,min(c.g,c.b)))*(1.0-bl*0.5);
@@ -2336,7 +2345,7 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
 }
 function v2Colors(mod,LK,CO){ const U=mod.v2U, D=mod.v2G, av=LK&&(LK.avatar||LK.varied);
   if(U.uMask){ U.uMaskOn.value=(av&&D.mask)?1:0; if(av){ U.uSkinN.value.set(LK.skin); U.uEye.value.set(LK.eye||'#5b3a22'); U.uLip.value.set(LK.lips||'#d98390'); } }
-  if(mod.v2hairU){ if(av&&LK.hair){ mod.v2hairU.uHair.value.set(LK.hair); mod.v2hairU.uHairOn.value=1; } else mod.v2hairU.uHairOn.value=0; } if(mod.v2cos) for(const CU of mod.v2cos){ CU.uMain.value.set(CO.v2||CO.d1||'#1e3fa8'); CU.uSpk.value.set(CO.v2s||'#ffffff'); } if(!mod.v2G.boy) mod.v2U.uSuit.value.set(CO.d1||'#ffffff'); if(mod.v2hair&&LK.hair){ mod.v2hair.material.color.set(LK.hair); mod.v2U.uScalp.value.set(LK.hair).multiplyScalar(.8); mod.v2U.uScalpOn.value=1; } }
+  if(mod.v2hairU){ if(av&&LK.hair){ mod.v2hairU.uHair.value.set(LK.hair); mod.v2hairU.uHairOn.value=1; } else mod.v2hairU.uHairOn.value=0; } if(mod.v2cos) for(const CU of mod.v2cos){ CU.uMain.value.set(CO.v2||CO.d1||'#1e3fa8'); CU.uSpk.value.set(CO.v2s||'#ffffff'); } if(!mod.v2G.boy) mod.v2U.uSuit.value.set(CO.d1||'#ffffff'); if(mod.v2hair&&LK.hair) mod.v2hair.material.color.set(LK.hair); if(!mod.v2G.boy){ if(av&&LK.hair) mod.v2U.uScalp.value.set(LK.hair).multiplyScalar(.8); else mod.v2U.uScalp.value.copy(mod.v2G.hair0||mod.v2U.uScalp.value).multiplyScalar(.8); mod.v2U.uScalpOn.value=1; } }
 
 // ---------- Modellierter Kopf + Haarschale ----------
 let HEADGEO=null, HAIRGEO=null;
@@ -2674,7 +2683,8 @@ function buildAvatarPanel(){
    <div class="row"><div class="lab">LIPPEN</div>${sw('lips',AV_OPT.lips)}</div>
    ${sec('Haare')}
    <div class="row"><div class="lab">HAARFARBE</div>${sw('hair',AV_OPT.hair)}</div>
-   <div class="row" style="opacity:.6;font-size:12px">Weitere Frisuren, Brille, Ohrringe und Sommersprossen folgen.</div>
+   <div class="row"><div class="lab">FRISUR</div>${[[1,'Pferdeschwanz'],[0,'Dutt'],[2,'Zopf'],[5,'Offen'],[4,'Bob']].map(([v,n])=>`<button class="chip${AV.style===v?' on':''}" data-k="style" data-v="${v}">${n}</button>`).join('')}</div>
+   <div class="row" style="opacity:.6;font-size:12px">Brille, Ohrringe und Sommersprossen folgen.</div>
    ${sec('Kostüm')}
    <div class="row"><div class="lab">FARBE</div>${Object.entries(COSTUMES).map(([k,c])=>`<span class="sw cosw${costume===k?' on':''}" data-c="${k}" title="${c.n}" style="background:linear-gradient(135deg,${c.v2||c.d1} 55%,${c.v2s||'#ffffff'} 56%)"></span>`).join('')}</div>
    ${sec('Figur')}
