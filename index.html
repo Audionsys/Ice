@@ -2170,7 +2170,7 @@ let V2G=null, V2L=0;
 let V2B=null;
 function v2Mask(u){ const t=new THREE.TextureLoader().load(u); t.flipY=false; t.colorSpace=THREE.NoColorSpace; return t; }
 const V2HAIR={}, V2HAIRF={bun:'v3hair_bun',braid:'v3hair_braid',open:'v3hair_open',bob:'v3hair_bob'}; let V2LDR=null;
-function v2HairStyle(LK){ const st=LK&&LK.style; return st==='twobuns'?'bun':st==='open'?'pony':(st||'pony'); }
+function v2HairStyle(LK){ const st=LK&&LK.style; return st==='twobuns'?'bun':(st||'pony'); }
 function v2HairNeed(st){ if(!V2G||st==='pony'||V2HAIR[st]||!V2HAIRF[st]||!V2LDR) return; V2HAIR[st]='loading';
   V2LDR.getJ('model/'+V2HAIRF[st]+'.json').then(js=>V2LDR.parse(js)).then(gl=>{ gl.scene.updateMatrixWorld(true); const sks=[]; gl.scene.traverse(o=>{if(o.isSkinnedMesh)sks.push(o);});
     const parts=[]; for(const o of sks){ const pg=o.geometry.clone(); pg.applyMatrix4(o.matrixWorld); pg.deleteAttribute('tangent'); const map=o.skeleton.bones.map(bb=>V2G.ix[bb.name.replace(/^mixamorig:?/,'')]??0), si2=pg.attributes.skinIndex;
@@ -2273,6 +2273,39 @@ function v2FitSkate(D,gl,hb){ let src=null; gl.scene.updateMatrixWorld(true); gl
   const out=new THREE.BufferGeometry(); for(const key of ['position','normal','uv','skinIndex','skinWeight']){ if(!parts[0].attributes[key]) continue; const arrs=parts.map(x=>x.attributes[key].array), tot=arrs.reduce((a,b)=>a+b.length,0), Ct=arrs[0].constructor, o=new Ct(tot); let off=0; for(const a of arrs){o.set(a,off);off+=a.length;} out.setAttribute(key,new THREE.BufferAttribute(o,parts[0].attributes[key].itemSize)); }
   if(parts[0].index){ const c0=parts[0].attributes.position.count, i0=parts[0].index.array, i1=parts[1].index.array, idx=new Uint32Array(i0.length+i1.length); idx.set(i0,0); for(let i=0;i<i1.length;i++) idx[i0.length+i]=i1[i]+c0; out.setIndex(new THREE.BufferAttribute(idx,1)); }
   return {g:out,mat:src.material,hb}; }
+// Haar-Material: Strähnen-Glanz (Kajiya-Kay), Durchscheinen an den Rändern, weicher Umriss, Federschwingen
+function v2HairInfo(g){ if(g.userData.hi) return g.userData.hi; g.computeBoundingBox(); const bb=g.boundingBox, P=g.attributes.position, c=new THREE.Vector3((bb.min.x+bb.max.x)/2,bb.max.y-.015,(bb.min.z+bb.max.z)/2+.01), t=new THREE.Vector3(), v=new THREE.Vector3(); let md=0;
+  for(let i=0;i<P.count;i++){ v.fromBufferAttribute(P,i); const d=v.distanceTo(c); if(d>md){md=d;t.copy(v);} } return g.userData.hi={crown:c,tip:t,len:Math.max(md,.05)}; }
+function v2HairMat(pm,g,D,mod){ const hi=v2HairInfo(g), st=D.boy?'boy':v2HairStyle(mod.look||{});
+  const amp={pony:1,braid:.9,open:.55,bob:.35,bun:.12,boy:.18}[st]??.5;
+  const HU={uHair:{value:new THREE.Color(1,1,1)},uHair0:{value:(D.hair0||new THREE.Color(.4,.25,.15)).clone()},uHairOn:{value:0},uCrown:{value:hi.crown.clone()},uHLen:{value:hi.len},uSwing:{value:new THREE.Vector3()},uFree:{value:st==='bun'?.75:st==='bob'?.45:.3}};
+  // Optik bleibt wie gebacken (Strähnen-Textur), nur die Spitzen schwingen
+  (mod.v2sw=mod.v2sw||[]).push({U:HU,hi,amp,x:null,v:new THREE.Vector3(),last:0});
+  pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,HU);
+    sh.vertexShader='uniform vec3 uCrown,uSwing;uniform float uHLen,uFree;\n'+sh.vertexShader
+      .replace('#include <skinning_vertex>','#include <skinning_vertex>\n { vec3 dB=position-uCrown; float r=length(dB)/uHLen; float w=smoothstep(uFree,1.0,r); transformed+=uSwing*w*w;}');
+    sh.fragmentShader='uniform vec3 uHair,uHair0;uniform float uHairOn;\n'+sh.fragmentShader
+      .replace('#include <map_fragment>',`#include <map_fragment>
+ { float l=dot(diffuseColor.rgb,vec3(0.3,0.59,0.11)), l0=dot(uHair0,vec3(0.3,0.59,0.11)); diffuseColor.rgb=mix(diffuseColor.rgb,clamp(uHair*pow(l/l0,0.8)*1.2,0.0,1.4),uHairOn); }`)
+      ; };
+  pm.customProgramCacheKey=()=>'v2hair2'; return HU; }
+// Federschwingen der Haare (Spitze hängt nach, fliegt bei Drehungen raus, weht beim Laufen nach hinten)
+function v2HairSwing(mod,s){ if(!mod.v2sw) return; const D=mod.v2G, h=D.ix.Head, P=mod.v2P, Q=mod.v2D, now=performance.now()/1000;
+  const Tw=GT.hsT||(GT.hsT=new THREE.Vector3()), n=GT.hsN||(GT.hsN=new THREE.Vector3()), o=GT.hsO||(GT.hsO=new THREE.Vector3());
+  for(const S of mod.v2sw){ Tw.copy(S.hi.tip).sub(D.p0[h]).multiplyScalar(s).applyQuaternion(Q[h]).add(P[h]);
+    let dt=S.last?Math.min(.05,now-S.last):0; S.last=now;
+    if(!S.x||dt<=0){ S.x=Tw.clone(); S.pT=Tw.clone(); S.v.set(0,0,0); S.U.uSwing.value.set(0,0,0); continue; }
+    const vT=o.subVectors(Tw,S.pT).divideScalar(dt); S.pT.copy(Tw); if(vT.lengthSq()>400) { S.x.copy(Tw); S.v.set(0,0,0); continue; }
+    // Ziel: etwas hinter der Bewegung (Fahrtwind), dazu gedämpfte Feder
+    // Pendel: Spitze hängt am Scheitel mit fester Länge, weiche Rückstellfeder zur modellierten Form → fliegt bei Drehung nach außen
+    const A=GT.hsA||(GT.hsA=new THREE.Vector3()); A.copy(S.hi.crown).sub(D.p0[h]).multiplyScalar(s).applyQuaternion(Q[h]).add(P[h]); const Lp=A.distanceTo(Tw);
+    const K=16, C=3.2, sub=4, hdt=dt/sub, tg=n.copy(Tw).addScaledVector(vT,-.03);
+    for(let k=0;k<sub;k++){ S.v.x+=(K*(tg.x-S.x.x)-C*S.v.x)*hdt; S.v.y+=(K*(tg.y-S.x.y)-C*S.v.y)*hdt; S.v.z+=(K*(tg.z-S.x.z)-C*S.v.z)*hdt; S.x.addScaledVector(S.v,hdt);
+      o.subVectors(S.x,A); const l=o.length(); if(l>1e-4){ o.multiplyScalar(Lp/l); const px=A.x+o.x, py=A.y+o.y, pz=A.z+o.z; S.v.x+=(px-S.x.x)/hdt*.5; S.v.y+=(py-S.x.y)/hdt*.5; S.v.z+=(pz-S.x.z)/hdt*.5; S.x.set(px,py,pz); } }
+    o.subVectors(S.x,Tw); const mx=S.hi.len*s*.9; if(o.length()>mx) { o.setLength(mx); S.x.copy(Tw).add(o); }
+    // nicht in den Kopf hinein schwingen
+    n.subVectors(Tw,P[h]).normalize(); const inw=o.dot(n); if(inw<0) o.addScaledVector(n,-inw);
+    S.U.uSwing.value.copy(o).multiplyScalar(S.amp); } }
 function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; mod.v2G=D;
   const U={uMask:{value:D.mask||null},uMaskOn:{value:D.mask?1:0},uSkinN:{value:new THREE.Color(1,1,1)},uSkin0:{value:(D.skin0||new THREE.Color(1,1,1)).clone()},uEye:{value:new THREE.Color('#5b3a22')},uIris0:{value:D.iris0||.3},uLip:{value:new THREE.Color(1,1,1)},uLip0:{value:(D.lip0||new THREE.Color(1,1,1)).clone()},uSuit:{value:new THREE.Color('#ffffff')},uNeck:{value:D.boy?-9:D.neckY},uBoot:{value:D.ankY+.07},uScalp:{value:new THREE.Color('#5a3420')},uScalpOn:{value:0},uHd:{value:new THREE.Vector4(D.head.hy,D.head.fz,D.head.bz,D.head.cx)}};
   mat.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,U);
@@ -2302,7 +2335,7 @@ function v2Mesh(mod,mirror,D){ D=D||V2G; const mat=D.mat.clone(); mod.v2=true; m
     const hair=new THREE.SkinnedMesh(D.hairG,hm); hair.bindMode='detached'; hair.bind(skel,new THREE.Matrix4()); hair.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e4); hair.frustumCulled=false; hair.castShadow=!mirror; mod.grp.add(hair); mod.v2hair=hair; }
   if(D.parts&&D.parts.length){ boot.visible=false; U.uBoot.value=-9; mod.v2parts=[]; const LKm=mod.look||{}, hst=D.boy?'pony':v2HairStyle(LKm); if(!D.boy) v2HairNeed(hst); const hairP=(!D.boy&&hst!=='pony'&&Array.isArray(V2HAIR[hst]))?V2HAIR[hst]:null;
     const plist=hairP?D.parts.filter(p=>!/haar|hair/i.test(p.name)).concat(hairP):D.parts;
-    for(const p of plist){ const pm=p.mat.clone(); if(/haar|hair/i.test(p.name)){ const HU={uHair:{value:new THREE.Color(1,1,1)},uHair0:{value:(D.hair0||new THREE.Color(.4,.25,.15)).clone()},uHairOn:{value:0}}; mod.v2hairU=HU; pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,HU); sh.fragmentShader='uniform vec3 uHair,uHair0;uniform float uHairOn;\n'+sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n { float l=dot(diffuseColor.rgb,vec3(0.3,0.59,0.11)), l0=dot(uHair0,vec3(0.3,0.59,0.11)); diffuseColor.rgb=mix(diffuseColor.rgb,clamp(uHair*pow(l/l0,0.8)*1.2,0.0,1.4),uHairOn); }'); }; pm.customProgramCacheKey=()=>'v2hair'; } if(/kufe|stahl/i.test(pm.name||'')){ pm.color.set('#d9dde3'); pm.metalness=.3; pm.roughness=.25; } if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(/outfit|mieder|rock/i.test(p.name)){ const CU={uMain:{value:new THREE.Color('#1e3fa8')},uSpk:{value:new THREE.Color('#ffffff')}}; (mod.v2cos=mod.v2cos||[]).push(CU);
+    for(const p of plist){ const pm=p.mat.clone(); if(/haar|hair/i.test(p.name)){ const HU=v2HairMat(pm,p.g,D,mod); mod.v2hairU=HU; } if(/kufe|stahl/i.test(pm.name||'')){ pm.color.set('#d9dde3'); pm.metalness=.3; pm.roughness=.25; } if(/outfit/i.test(p.name)){ pm.roughness=.78; pm.metalness=0; pm.roughnessMap=null; pm.metalnessMap=null; } if(/outfit|mieder|rock/i.test(p.name)){ const CU={uMain:{value:new THREE.Color('#1e3fa8')},uSpk:{value:new THREE.Color('#ffffff')}}; (mod.v2cos=mod.v2cos||[]).push(CU);
         pm.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,CU); sh.fragmentShader='uniform vec3 uMain,uSpk;\n'+sh.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
           { vec3 c=diffuseColor.rgb; float lum=dot(c,vec3(0.3,0.59,0.11)); float bl=smoothstep(0.015,0.06,c.b-max(c.r,c.g));
             float spk=smoothstep(0.35,0.7,min(c.r,min(c.g,c.b)))*(1.0-bl*0.5);
@@ -2362,6 +2395,7 @@ function poseV2(m,mod,J,sc,mirror){ const D=mod.v2G, n=D.n, Dl=mod.v2D, P=mod.v2
   const x=V(7).crossVectors(up,V(8).copy(hs).addScaledVector(up,-hs.dot(up)).normalize()); mod.v2q=(mod.v2q||new THREE.Quaternion()).setFromRotationMatrix(GT.bm.makeBasis(x.normalize(),up,V(8)));
   const k=mod.v2k||(mod.v2k=[new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()]); k[0].copy(P[D.ix.LeftUpLeg]);k[1].copy(P[D.ix.LeftLeg]);k[2].copy(P[D.ix.RightUpLeg]);k[3].copy(P[D.ix.RightLeg]);
   mod.v2r=[D.waist[0]*s*1.12,D.waist[1]*s*1.15];
+  v2HairSwing(mod,s);
   if(!mirror){(mod.ftL||(mod.ftL=new THREE.Vector3())).copy(P[lf]); (mod.ftR||(mod.ftR=new THREE.Vector3())).copy(P[rf]);}
 }
 function v2Colors(mod,LK,CO){ const U=mod.v2U, D=mod.v2G, av=LK&&(LK.avatar||LK.varied);
@@ -2704,7 +2738,7 @@ function buildAvatarPanel(){
    <div class="row"><div class="lab">LIPPEN</div>${sw('lips',AV_OPT.lips)}</div>
    ${sec('Haare')}
    <div class="row"><div class="lab">HAARFARBE</div>${sw('hair',AV_OPT.hair)}</div>
-   <div class="row"><div class="lab">FRISUR</div>${[[1,'Pferdeschwanz'],[0,'Dutt'],[2,'Zopf'],[4,'Bob']].map(([v,n])=>`<button class="chip${AV.style===v?' on':''}" data-k="style" data-v="${v}">${n}</button>`).join('')}</div>
+   <div class="row"><div class="lab">FRISUR</div>${[[1,'Pferdeschwanz'],[0,'Dutt'],[2,'Zopf'],[5,'Offen'],[4,'Bob']].map(([v,n])=>`<button class="chip${AV.style===v?' on':''}" data-k="style" data-v="${v}">${n}</button>`).join('')}</div>
    <div class="row" style="opacity:.6;font-size:12px">Brille, Ohrringe und Sommersprossen folgen.</div>
    ${sec('Kostüm')}
    <div class="row"><div class="lab">FARBE</div>${Object.entries(COSTUMES).map(([k,c])=>`<span class="sw cosw${costume===k?' on':''}" data-c="${k}" title="${c.n}" style="background:linear-gradient(135deg,${c.v2||c.d1} 55%,${c.v2s||'#ffffff'} 56%)"></span>`).join('')}</div>
