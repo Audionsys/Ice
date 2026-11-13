@@ -658,10 +658,31 @@ const tr=document.createElement('canvas'); tr.width=64*22; tr.height=34*22; cons
 function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
 function sdRR(x,y,hw,hh,r){const qx=Math.abs(x)-hw+r,qy=Math.abs(y)-hh+r;return Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-r;}
 const crowd=[];
+// Audionsys-Logo als „unters Eis gemalte“ Variante: Chrom-Schrift farbig statt weiß, Glow gedämpft, Eis-Kratzer darüber
+function iceLogo(img){ const W=img.naturalWidth*2, H=img.naturalHeight*2, c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
+  x.imageSmoothingQuality='high'; x.filter='blur(0.6px)'; x.drawImage(img,0,0,W,H); x.filter='none';
+  const d=x.getImageData(0,0,W,H), p=d.data, gA=[196,112,28], gB=[28,86,190];
+  for(let i=0;i<p.length;i+=4){ const r=p[i]/255,g=p[i+1]/255,b=p[i+2]/255; let a=p[i+3]/255; if(a<.01) continue;
+    const mx=Math.max(r,g,b), mn=Math.min(r,g,b), sat=(mx-mn)/Math.max(mx,1e-3), L=.3*r+.59*g+.11*b, u=((i>>2)%W)/W;
+    const t=Math.min(1,Math.max(0,(u-.43)/.14)), gr=[gA[0]+(gB[0]-gA[0])*t,gA[1]+(gB[1]-gA[1])*t,gA[2]+(gB[2]-gA[2])*t];
+    const chrome=Math.min(1,Math.max(0,(.3-sat)/.2))*Math.min(1,L/.35);
+    // farbige Teile: Farbton behalten, satter und dunkler (Farbe auf weißem Grund)
+    const k=.78/Math.max(mx,.2); let R=r*k*255, G=g*k*255, B=b*k*255;
+    // Chrom-Schrift: Verlauf Gold→Blau, Chrom-Schattierung bleibt als Helligkeitsspiel
+    const sh=.62+.5*(1-L); R+=(gr[0]*sh-R)*chrome; G+=(gr[1]*sh-G)*chrome; B+=(gr[2]*sh-B)*chrome;
+    a=a*(chrome>.5?1:Math.min(1,.25+mx*1.1)); a=a<.55?a*a/.55:a; // weiche Glow-Säume ausdünnen
+    p[i]=R; p[i+1]=G; p[i+2]=B; p[i+3]=a*255; }
+  x.putImageData(d,0,0);
+  // Eis drüber: feine Kratzer und Reifschleier nehmen etwas Farbe weg
+  x.globalCompositeOperation='destination-out'; let sd=7; const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
+  for(let n=0;n<420;n++){ const x0=rnd()*W, y0=rnd()*H, ang=(rnd()-.5)*.9+(rnd()<.5?0:Math.PI), len=40+rnd()*260;
+    x.strokeStyle=`rgba(0,0,0,${.12+rnd()*.3})`; x.lineWidth=.6+rnd()*1.6; x.beginPath(); x.moveTo(x0,y0); x.quadraticCurveTo(x0+Math.cos(ang)*len*.5+(rnd()-.5)*30,y0+Math.sin(ang)*len*.5+(rnd()-.5)*30,x0+Math.cos(ang)*len,y0+Math.sin(ang)*len); x.stroke(); }
+  for(let n=0;n<60;n++){ const gx=rnd()*W, gy=rnd()*H, rr0=30+rnd()*120, gd=x.createRadialGradient(gx,gy,0,gx,gy,rr0); gd.addColorStop(0,'rgba(0,0,0,.18)'); gd.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=gd; x.fillRect(gx-rr0,gy-rr0,rr0*2,rr0*2); }
+  x.globalCompositeOperation='source-over'; return c; }
 function applyCenterLogo(){ if(typeof R3==='undefined'||!R3||!R3.logo) return; const L=R3.logo, M=L.material;
   if(cLogo==='none'){L.visible=false;return;} L.visible=true;
-  if(cLogo==='audionsys'){ if(!R3.logoAud&&AUDLOGO.complete&&AUDLOGO.naturalWidth){R3.logoAud=new THREE.Texture(AUDLOGO);R3.logoAud.colorSpace=THREE.SRGBColorSpace;R3.logoAud.anisotropy=8;R3.logoAud.needsUpdate=true;}
-    if(!R3.logoAud){L.visible=false;return;} M.map=R3.logoAud; M.opacity=.9; L.scale.set(12.6,5,1); }
+  if(cLogo==='audionsys'){ if(!R3.logoAud&&AUDLOGO.complete&&AUDLOGO.naturalWidth){R3.logoAud=new THREE.CanvasTexture(iceLogo(AUDLOGO));R3.logoAud.colorSpace=THREE.SRGBColorSpace;R3.logoAud.anisotropy=8;R3.logoAud.needsUpdate=true;}
+    if(!R3.logoAud){L.visible=false;return;} M.map=R3.logoAud; M.opacity=.85; L.scale.set(12.6,5,1); }
   else { M.map=R3.logoBee; M.opacity=.62; L.scale.set(8.8,8.8,1); }
   M.needsUpdate=true; }
 // ---------- Mini Ice Bees Logo ----------
@@ -695,7 +716,7 @@ function applyCrowd(){ if(typeof R3==='undefined'||!R3||!R3.crowd3) return; cons
 let cLogo='bees'; try{cLogo=localStorage.getItem('eiskuer_clogo')||'bees';}catch(e){}
 const AUDLOGO=new Image(); AUDLOGO.onload=()=>{if(typeof applyCenterLogo==='function')applyCenterLogo();}; AUDLOGO.src='intro/audionsys_ice.png';
 function drawCenterLogo(g,rot){ if(cLogo==='none') return; g.save(); if(rot) g.rotate(-rot);
-  if(cLogo==='audionsys'){ if(AUDLOGO.complete&&AUDLOGO.naturalWidth){g.globalAlpha=.9; g.drawImage(AUDLOGO,-6.3,-2.5,12.6,5);} }
+  if(cLogo==='audionsys'){ if(AUDLOGO.complete&&AUDLOGO.naturalWidth){if(!AUDLOGO._ice)AUDLOGO._ice=iceLogo(AUDLOGO); g.globalAlpha=.85; g.drawImage(AUDLOGO._ice,-6.3,-2.5,12.6,5);} }
   else { g.globalAlpha=.62; g.drawImage(BEE,-4.4,-4.4,8.8,8.8); }
   g.restore(); }
 (function drawBG(){
